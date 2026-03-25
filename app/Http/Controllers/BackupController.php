@@ -148,6 +148,67 @@ class BackupController extends Controller
     }
 
     /**
+     * Leer la configuración del schedule
+     */
+    public function schedule()
+    {
+        $config  = $this->loadScheduleConfig();
+        $nextRun = $this->calculateNextRun($config);
+
+        $logPath = storage_path('logs/backup.log');
+        $lastLog = null;
+        if (file_exists($logPath)) {
+            $lines   = file($logPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            $lastLog = !empty($lines) ? end($lines) : null;
+        }
+
+        // Get server timezone offset in hours
+        $serverTimezone = now()->getOffsetString(); // e.g., "+06:00"
+        $offsetHours = intval(substr($serverTimezone, 0, 3)); // Extract hours
+
+        return response()->json(array_merge($config, [
+            'next_run'           => $nextRun,
+            'last_log'           => $lastLog,
+            'server_timezone'    => $serverTimezone,
+            'server_offset_hours' => $offsetHours,
+        ]));
+    }
+
+    /**
+     * Guardar la configuración del schedule
+     */
+    public function updateSchedule(Request $request)
+    {
+        $validated = $request->validate([
+            'enabled'      => 'required|boolean',
+            'frequency'    => 'required|in:daily,weekly,monthly',
+            'time'         => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'day_of_week'  => 'nullable|integer|min:0|max:6',
+            'day_of_month' => 'nullable|integer|min:1|max:28',
+            'retention'    => 'required|integer|min:1|max:365',
+        ]);
+
+        $config = [
+            'enabled'      => (bool)  $validated['enabled'],
+            'frequency'    =>         $validated['frequency'],
+            'time'         =>         $validated['time'],
+            'day_of_week'  => (int)  ($validated['day_of_week']  ?? 1),
+            'day_of_month' => (int)  ($validated['day_of_month'] ?? 1),
+            'retention'    => (int)   $validated['retention'],
+        ];
+
+        file_put_contents(
+            storage_path('app/backup_schedule.json'),
+            json_encode($config, JSON_PRETTY_PRINT)
+        );
+
+        return response()->json(array_merge($config, [
+            'next_run' => $this->calculateNextRun($config),
+            'message'  => 'Configuración guardada exitosamente',
+        ]));
+    }
+
+    /**
      * Restaurar un backup
      */
     public function restore(string $filename)
@@ -173,6 +234,7 @@ class BackupController extends Controller
                 $collection = $db->selectCollection($collectionName);
                 $collection->deleteMany([]);
                 if (!empty($documents)) {
+                    $documents = array_map([$this, 'convertExtendedJson'], $documents);
                     $collection->insertMany($documents);
                     $restored += count($documents);
                 }
@@ -221,5 +283,92 @@ class BackupController extends Controller
         if ($bytes >= 1048576) return round($bytes / 1048576, 2) . ' MB';
         if ($bytes >= 1024)    return round($bytes / 1024, 2)    . ' KB';
         return $bytes . ' B';
+    }
+
+    private function loadScheduleConfig(): array
+    {
+        $path = storage_path('app/backup_schedule.json');
+        if (file_exists($path)) {
+            $config = json_decode(file_get_contents($path), true);
+            if (is_array($config)) {
+                return $config;
+            }
+        }
+
+        // Defaults
+        return [
+            'enabled'      => true,
+            'frequency'    => 'daily',
+            'time'         => '02:00',
+            'day_of_week'  => 1,
+            'day_of_month' => 1,
+            'retention'    => 7,
+        ];
+    }
+
+    private function calculateNextRun(array $config): ?string
+    {
+        if (empty($config['enabled'])) {
+            return null;
+        }
+
+        [$hour, $minute] = array_map('intval', explode(':', $config['time'] ?? '02:00'));
+        $now  = now();
+        $next = $now->copy()->setTime($hour, $minute, 0);
+
+        return match ($config['frequency'] ?? 'daily') {
+            'daily' => $next->isPast() ? $next->addDay()->toDateTimeString()
+                                       : $next->toDateTimeString(),
+
+            'weekly' => (function () use ($now, $next, $config, $hour, $minute) {
+                $target = (int) ($config['day_of_week'] ?? 1);
+                $days   = ($target - $now->dayOfWeek + 7) % 7;
+                if ($days === 0 && $next->isPast()) $days = 7;
+                return $next->addDays($days)->toDateTimeString();
+            })(),
+
+            'monthly' => (function () use ($now, $config, $hour, $minute) {
+                $day  = (int) ($config['day_of_month'] ?? 1);
+                $next = $now->copy()->setDay($day)->setTime($hour, $minute, 0);
+                if ($next->isPast()) $next->addMonth();
+                return $next->toDateTimeString();
+            })(),
+
+            default => null,
+        };
+    }
+
+    /**
+     * Converts MongoDB Extended JSON arrays (produced by json_decode) back to
+     * proper BSON types so insertMany works correctly on restore.
+     */
+    private function convertExtendedJson(array $doc): array
+    {
+        foreach ($doc as $key => $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+
+            if (isset($value['$oid'])) {
+                $doc[$key] = new \MongoDB\BSON\ObjectId($value['$oid']);
+            } elseif (isset($value['$date'])) {
+                $dateVal = $value['$date'];
+                if (is_array($dateVal) && isset($dateVal['$numberLong'])) {
+                    $doc[$key] = new \MongoDB\BSON\UTCDateTime((int) $dateVal['$numberLong']);
+                } elseif (is_string($dateVal)) {
+                    $doc[$key] = new \MongoDB\BSON\UTCDateTime((int) (strtotime($dateVal) * 1000));
+                }
+            } elseif (isset($value['$numberLong'])) {
+                $doc[$key] = (int) $value['$numberLong'];
+            } elseif (isset($value['$numberInt'])) {
+                $doc[$key] = (int) $value['$numberInt'];
+            } elseif (isset($value['$numberDouble'])) {
+                $doc[$key] = (float) $value['$numberDouble'];
+            } else {
+                $doc[$key] = $this->convertExtendedJson($value);
+            }
+        }
+
+        return $doc;
     }
 }
