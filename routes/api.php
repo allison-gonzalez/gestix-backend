@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\TicketController;
 
 /*
 |--------------------------------------------------------------------------
@@ -9,6 +10,18 @@ use App\Http\Controllers\BackupController;
 |--------------------------------------------------------------------------
 */
 
+// Rutas de Tickets
+Route::prefix('tickets')->group(function () {
+    Route::get('/', [TicketController::class, 'index']);
+    Route::get('/stats', [TicketController::class, 'stats']);
+    Route::post('/', [TicketController::class, 'store']);
+    Route::get('/{id}', [TicketController::class, 'show']);
+    Route::put('/{id}', [TicketController::class, 'update']);
+    Route::delete('/{id}', [TicketController::class, 'destroy']);
+    Route::post('/{id}/resolve', [TicketController::class, 'resolve']);
+});
+
+// Rutas de Backups
 Route::prefix('backup')->group(function () {
     Route::get('/info',       [BackupController::class, 'info']);
     Route::post('/create',    [BackupController::class, 'create']);

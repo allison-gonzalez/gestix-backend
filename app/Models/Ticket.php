@@ -27,7 +27,6 @@ class Ticket extends Model
         'fecha_resolucion' => 'datetime',
         'usuario_autor_id' => 'integer',
         'categoria_id' => 'integer',
-        'comentarios' => 'array',
     ];
 
     /**
