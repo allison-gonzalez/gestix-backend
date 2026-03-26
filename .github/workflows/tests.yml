@@ -32,6 +32,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, mongodb
+          ini-values: extension=mongodb.so
           coverage: none
 
       - name: Install Composer dependencies
