@@ -36,7 +36,7 @@ jobs:
           coverage: none
 
       - name: Install Composer dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: composer install --prefer-dist --no-interaction --no-progress --ignore-platform-req=ext-mongodb
 
       - name: Copy environment file
         run: cp .env.example .env
