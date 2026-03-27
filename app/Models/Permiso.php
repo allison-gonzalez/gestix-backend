@@ -8,6 +8,9 @@ class Permiso extends Model
 {
     protected $connection = 'mongodb';
     protected $collection = 'permisos';
+    protected $primaryKey = '_id';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'nombre',

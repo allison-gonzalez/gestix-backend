@@ -91,7 +91,14 @@ class DepartamentoController extends Controller
                 'estatus' => 'in:0,1',
             ]);
 
-            $departamento->update($validated);
+            $departamento->fill($validated);
+            $saved = $departamento->save();
+            
+            if ($saved) {
+                // Hacer un query fresco a BD para confirmar persistencia
+                $fresh = Departamento::find($id);
+                $departamento = $fresh;
+            }
 
             return response()->json([
                 'data' => $departamento,

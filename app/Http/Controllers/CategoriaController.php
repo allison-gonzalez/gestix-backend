@@ -93,7 +93,15 @@ class CategoriaController extends Controller
                 'estatus' => 'in:0,1',
             ]);
 
-            $categoria->update($validated);
+            $categoria->fill($validated);
+            $saved = $categoria->save();
+            
+            if ($saved) {
+                // Hacer un query fresco a BD para confirmar persistencia
+                $fresh = Categoria::find($id);
+                \Log::info("Categoria después de query: " . json_encode($fresh->toArray()));
+                $categoria = $fresh;
+            }
 
             return response()->json([
                 'data' => $categoria,

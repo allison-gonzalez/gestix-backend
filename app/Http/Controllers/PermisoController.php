@@ -93,7 +93,14 @@ class PermisoController extends Controller
                 'estatus' => 'in:0,1',
             ]);
 
-            $permiso->update($validated);
+            $permiso->fill($validated);
+            $saved = $permiso->save();
+            
+            if ($saved) {
+                // Hacer un query fresco a BD para confirmar persistencia
+                $fresh = Permiso::find($id);
+                $permiso = $fresh;
+            }
 
             return response()->json([
                 'data' => $permiso,

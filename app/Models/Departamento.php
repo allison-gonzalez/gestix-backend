@@ -8,6 +8,9 @@ class Departamento extends Model
 {
     protected $connection = 'mongodb';
     protected $collection = 'departamentos';
+    protected $primaryKey = '_id';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'nombre',
