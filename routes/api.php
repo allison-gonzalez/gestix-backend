@@ -3,6 +3,10 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\DepartamentoController;
+use App\Http\Controllers\PermisoController;
+use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\ReporteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -32,3 +36,15 @@ Route::prefix('backup')->group(function () {
     Route::delete('/{filename}', [BackupController::class, 'delete']);
     Route::post('/restore/{filename}', [BackupController::class, 'restore']);
 });
+
+// Rutas de Departamentos
+Route::apiResource('departamentos', DepartamentoController::class);
+
+// Rutas de Permisos
+Route::apiResource('permisos', PermisoController::class);
+
+// Rutas de Categorías
+Route::apiResource('categorias', CategoriaController::class);
+
+// Rutas de Reportes
+Route::get('/reportes', [ReporteController::class, 'index']);
