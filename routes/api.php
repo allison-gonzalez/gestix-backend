@@ -1,44 +1,21 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\BackupController;
+use App\Http\Controllers\TicketController;
+use App\Http\Controllers\DepartamentoController;
+use App\Http\Controllers\PermisoController;
+use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\AuthController;
-use App\Models\User;
 
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
 
-Route::get('/test', function () {
-    return response()->json([
-        'success' => true,
-        'message' => 'API funcionando',
-        'timestamp' => now()
-    ]);
-});
-
-Route::get('/test-db', function () {
-    try {
-        $user = User::where('correo', 'juan.perez@innovatechgdl.com')->first();
-        $userCount = User::count();
-        
-        return response()->json([
-            'success' => true,
-            'table_name' => (new User())->getTable(),
-            'total_users' => $userCount,
-            'specific_user' => [
-                'found' => $user ? true : false,
-                'nombre' => $user->nombre ?? 'N/A',
-                'correo' => $user->correo ?? 'N/A',
-                'password_matches' => $user && $user->contrasena === 'hash' ? 'YES' : 'NO'
-            ]
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'error' => $e->getMessage()
-        ], 500);
-    }
-});
-
+// Rutas de autenticación
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
@@ -48,6 +25,42 @@ Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
     });
+});
+
+// Rutas de Tickets
+Route::prefix('tickets')->group(function () {
+    Route::get('/', [TicketController::class, 'index']);
+    Route::get('/stats', [TicketController::class, 'stats']);
+    Route::post('/', [TicketController::class, 'store']);
+    Route::get('/{id}', [TicketController::class, 'show']);
+    Route::put('/{id}', [TicketController::class, 'update']);
+    Route::delete('/{id}', [TicketController::class, 'destroy']);
+    Route::post('/{id}/resolve', [TicketController::class, 'resolve']);
+});
+
+// Rutas de Backups
+Route::prefix('backup')->group(function () {
+    Route::get('/info',       [BackupController::class, 'info']);
+    Route::post('/create',    [BackupController::class, 'create']);
+    Route::get('/list',       [BackupController::class, 'list']);
+    Route::get('/schedule',    [BackupController::class, 'schedule']);
+    Route::put('/schedule',    [BackupController::class, 'updateSchedule']);
+    Route::get('/download/{filename}', [BackupController::class, 'download']);
+    Route::delete('/{filename}', [BackupController::class, 'delete']);
+    Route::post('/restore/{filename}', [BackupController::class, 'restore']);
+});
+
+// Rutas de Departamentos
+Route::apiResource('departamentos', DepartamentoController::class);
+
+// Rutas de Permisos
+Route::apiResource('permisos', PermisoController::class);
+
+// Rutas de Categorías
+Route::apiResource('categorias', CategoriaController::class);
+
+// Rutas de Reportes
+Route::get('/reportes', [ReporteController::class, 'index']);
 });
 
 Route::middleware('jwt')->group(function () {

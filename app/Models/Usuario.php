@@ -61,17 +61,13 @@ class Usuario extends Model
         return $this->hasMany(Comentario::class, 'usuario_autor_id', 'id');
     }
 
-    /**
-     * Verificar si el usuario tiene un permiso específico
-     */
+    
     public function tienePermiso($permiso_id)
     {
         return in_array($permiso_id, $this->permisos ?? []);
     }
 
-    /**
-     * Hash de contraseña (si usas autenticación)
-     */
+
     public function setContraseñaAttribute($value)
     {
         $this->attributes['contrasena'] = bcrypt($value);

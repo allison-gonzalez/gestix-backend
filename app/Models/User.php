@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -13,7 +12,7 @@ class User extends Eloquent implements \Illuminate\Contracts\Auth\Authenticatabl
     use \Illuminate\Auth\Authenticatable, Notifiable;
 
     protected $connection = 'mongodb';
-    protected $table = 'usuarios';  // Cambiado de $collection a $table
+    protected $table = 'usuarios';  
 
     /**
      * The attributes that are mass assignable.
@@ -50,7 +49,6 @@ class User extends Eloquent implements \Illuminate\Contracts\Auth\Authenticatabl
         return [
             'estatus' => 'integer',
             'departamento_id' => 'integer',
-            // 'permisos' se elimina del cast porque en MongoDB ya es un array nativo
         ];
     }
 }
