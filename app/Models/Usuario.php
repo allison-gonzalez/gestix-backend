@@ -26,20 +26,15 @@ class Usuario extends Model
     protected $casts = [
         'estatus' => 'integer',
         'departamento_id' => 'integer',
-        'permisos' => 'array',
     ];
 
-    /**
-     * Obtener el departamento del usuario
-     */
+    
     public function departamento()
     {
         return $this->belongsTo(Departamento::class, 'departamento_id', 'id');
     }
 
-    /**
-     * Obtener los permisos del usuario
-     */
+    
     public function permisosRelacion()
     {
         return $this->hasMany(Permiso::class, '_id', 'permisos[0]');

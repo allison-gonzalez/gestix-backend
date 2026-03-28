@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Models\Usuario;
+use App\Helpers\VigenereHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -36,7 +37,7 @@ class AuthController extends Controller
             }
 
             \Log::info('Buscando usuario con correo', ['correo' => $request->email]);
-            $user = User::where('correo', $request->email)->first();
+            $user = Usuario::where('correo', $request->email)->first();
             \Log::info('Resultado de búsqueda', ['user_found' => $user ? 'Sí' : 'No', 'user_id' => $user ? $user->_id : null]);
 
             if (!$user) {
@@ -47,8 +48,24 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            if ($user->contrasena !== $request->password) {
-                \Log::warning('Contraseña incorrecta', ['user_id' => $user->_id]);
+            // Verificación de contraseña (cifrada o texto plano)
+            $passwordValid = false;
+            
+            if (VigenereHelper::verify($request->password, $user->contrasena)) {
+                $passwordValid = true;
+                \Log::info('Login exitoso con contraseña cifrada', ['user_id' => $user->_id]);
+            }
+            elseif ($user->contrasena === $request->password) {
+                $passwordValid = true;
+                \Log::info('Login exitoso con contraseña plana (modo prueba)', ['user_id' => $user->_id]);
+            }
+
+            if (!$passwordValid) {
+                \Log::warning('Contraseña incorrecta', [
+                    'user_id' => $user->_id,
+                    'stored_password' => $user->contrasena,
+                    'provided_password' => $request->password
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Contraseña incorrecta',
@@ -87,8 +104,10 @@ class AuthController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
-                'email' => 'required|email|unique:users',
-                'password' => 'required|string|min:6|confirmed',
+                'email' => 'required|email',
+                'password' => 'required|string|min:6',
+                'telefono' => 'nullable|string',
+                'departamento_id' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -99,10 +118,23 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
+            // Verificar si el correo ya existe
+            $existingUser = Usuario::where('correo', $request->email)->first();
+            if ($existingUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El correo ya está registrado',
+                ], 422);
+            }
+
+            $user = Usuario::create([
+                'nombre' => $request->name,
+                'correo' => $request->email,
+                'contrasena' => VigenereHelper::encrypt($request->password),
+                'telefono' => $request->telefono ?? '',
+                'estatus' => 'activo',
+                'departamento_id' => $request->departamento_id ?? null,
+                'permisos' => [],
             ]);
 
             $token = $this->generateToken($user);
@@ -113,9 +145,13 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
+                    'id' => $user->_id,
+                    'nombre' => $user->nombre,
+                    'correo' => $user->correo,
+                    'telefono' => $user->telefono,
+                    'estatus' => $user->estatus,
+                    'departamento_id' => $user->departamento_id,
+                    'permisos' => $user->permisos,
                 ],
             ], 201);
         } catch (\Exception $e) {
@@ -196,7 +232,7 @@ class AuthController extends Controller
     }
 
    
-    private function generateToken(User $user)
+    private function generateToken(Usuario $user)
     {
         $issuedAt = time();
         $expire = $issuedAt + (60 * 60 * 24); // 24 horas

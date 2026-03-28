@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\TicketController;
@@ -14,6 +15,16 @@ use App\Http\Controllers\AuthController;
 | API Routes
 |--------------------------------------------------------------------------
 */
+
+// Ruta de prueba
+Route::get('/test', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'API funcionando',
+        'timestamp' => now(),
+        'server' => 'Laravel Backend'
+    ]);
+});
 
 // Rutas de autenticación
 Route::prefix('auth')->group(function () {
@@ -61,13 +72,3 @@ Route::apiResource('categorias', CategoriaController::class);
 
 // Rutas de Reportes
 Route::get('/reportes', [ReporteController::class, 'index']);
-});
-
-Route::middleware('jwt')->group(function () {
-    Route::get('/user', function (Request $request) {
-        return response()->json([
-            'success' => true,
-            'user' => $request->attributes->get('user_data'),
-        ]);
-    });
-});
