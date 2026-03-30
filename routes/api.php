@@ -7,6 +7,7 @@ use App\Http\Controllers\DepartamentoController;
 use App\Http\Controllers\PermisoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\UsuarioController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,3 +49,14 @@ Route::apiResource('categorias', CategoriaController::class);
 
 // Rutas de Reportes
 Route::get('/reportes', [ReporteController::class, 'index']);
+
+// Rutas de Usuarios
+Route::prefix('usuarios')->group(function () {
+    Route::get('/',              [UsuarioController::class, 'index']);
+    Route::post('/',             [UsuarioController::class, 'store']);
+    Route::get('/{id}',          [UsuarioController::class, 'show']);
+    Route::put('/{id}',          [UsuarioController::class, 'update']);
+    Route::delete('/{id}',       [UsuarioController::class, 'destroy']);
+    Route::post('/{id}/verify-password', [UsuarioController::class, 'verifyPassword']);
+});
+ 
