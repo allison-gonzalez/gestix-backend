@@ -18,15 +18,21 @@ class Ticket extends Model
         'fecha_resolucion',
         'usuario_autor_id',
         'categoria_id',
+        'departamento_id',
         'comentarios',
+        'archivo_path',
     ];
 
     protected $casts = [
         'fecha_creacion' => 'datetime',
         'fecha_asignacion' => 'datetime',
         'fecha_resolucion' => 'datetime',
-        'usuario_autor_id' => 'integer',
-        'categoria_id' => 'integer',
+        'usuario_autor_id' => 'string',
+        'categoria_id' => 'string',
+        'departamentoutor_id' => 'string',
+        'categoria_id' => 'string',
+        'departamento_id' => 'string',
+        'archivo_path' => 'string',
     ];
 
     /**

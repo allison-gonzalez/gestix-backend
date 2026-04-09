@@ -29,6 +29,7 @@ class TicketController extends Controller
                     'usuario_autor_id' => $ticket->usuario_autor_id,
                     'categoria_id' => $ticket->categoria_id,
                     'comentarios' => $ticket->comentarios ?? [],
+                    'archivo_path' => $ticket->archivo_path,
                     'estado' => $this->determinarEstado($ticket),
                 ];
             });
@@ -68,6 +69,7 @@ class TicketController extends Controller
                 'usuario_autor_id' => $ticket->usuario_autor_id,
                 'categoria_id' => $ticket->categoria_id,
                 'comentarios' => $ticket->comentarios ?? [],
+                'archivo_path' => $ticket->archivo_path,
                 'estado' => $this->determinarEstado($ticket),
             ];
 
@@ -91,11 +93,23 @@ class TicketController extends Controller
                 'titulo' => 'required|string|max:255',
                 'descripcion' => 'required|string',
                 'prioridad' => 'required|in:baja,media,alta,critica',
-                'categoria_id' => 'required|integer',
-                'usuario_autor_id' => 'required|integer',
+                'categoria_id' => 'required|string',
+                'departamento_id' => 'required|string',
+                'departamento_id' => 'required|string',
+                'usuario_autor_id' => 'required|string',
+                'archivo' => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240', // 10MB max
             ]);
 
             $validated['fecha_creacion'] = now();
+
+            // Manejar archivo si existe
+            if ($request->hasFile('archivo')) {
+                $file = $request->file('archivo');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $path = $file->storeAs('tickets', $filename, 'public');
+                $validated['archivo_path'] = $path;
+            }
+
             $ticket = Ticket::create($validated);
 
             $data = [
@@ -108,7 +122,9 @@ class TicketController extends Controller
                 'fecha_resolucion' => $ticket->fecha_resolucion,
                 'usuario_autor_id' => $ticket->usuario_autor_id,
                 'categoria_id' => $ticket->categoria_id,
+                'departamento_id' => $ticket->departamento_id,
                 'comentarios' => $ticket->comentarios ?? [],
+                'archivo_path' => $ticket->archivo_path,
                 'estado' => $this->determinarEstado($ticket),
             ];
 
@@ -141,10 +157,24 @@ class TicketController extends Controller
                 'titulo' => 'string|max:255',
                 'descripcion' => 'string',
                 'prioridad' => 'in:baja,media,alta,critica',
-                'categoria_id' => 'integer',
+                'departamento_id' => 'string',
+                'categoria_id' => 'string',
                 'fecha_asignacion' => 'nullable|date',
                 'fecha_resolucion' => 'nullable|date',
+                'archivo' => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240',
             ]);
+
+            // Manejar archivo si existe
+            if ($request->hasFile('archivo')) {
+                // Eliminar archivo anterior si existe
+                if ($ticket->archivo_path) {
+                    \Storage::disk('public')->delete($ticket->archivo_path);
+                }
+                $file = $request->file('archivo');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $path = $file->storeAs('tickets', $filename, 'public');
+                $validated['archivo_path'] = $path;
+            }
 
             $ticket->update($validated);
 
@@ -158,7 +188,9 @@ class TicketController extends Controller
                 'fecha_resolucion' => $ticket->fecha_resolucion,
                 'usuario_autor_id' => $ticket->usuario_autor_id,
                 'categoria_id' => $ticket->categoria_id,
+                'departamento_id' => $ticket->departamento_id,
                 'comentarios' => $ticket->comentarios ?? [],
+                'archivo_path' => $ticket->archivo_path,
                 'estado' => $this->determinarEstado($ticket),
             ];
 
@@ -238,8 +270,10 @@ class TicketController extends Controller
                 'fecha_creacion' => $ticket->fecha_creacion,
                 'fecha_asignacion' => $ticket->fecha_asignacion,
                 'fecha_resolucion' => $ticket->fecha_resolucion,
+                'departamento_id' => $ticket->departamento_id,
                 'usuario_autor_id' => $ticket->usuario_autor_id,
                 'categoria_id' => $ticket->categoria_id,
+                'departamento_id' => $ticket->departamento_id,
                 'comentarios' => $ticket->comentarios ?? [],
                 'estado' => $this->determinarEstado($ticket),
             ];
