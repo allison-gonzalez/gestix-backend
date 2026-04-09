@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\TicketController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\DepartamentoController;
 use App\Http\Controllers\PermisoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UsuarioController;
 
 /*
@@ -14,6 +16,28 @@ use App\Http\Controllers\UsuarioController;
 | API Routes
 |--------------------------------------------------------------------------
 */
+
+// Ruta de prueba
+Route::get('/test', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'API funcionando',
+        'timestamp' => now(),
+        'server' => 'Laravel Backend'
+    ]);
+});
+
+// Rutas de autenticación
+Route::prefix('auth')->group(function () {
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/register', [AuthController::class, 'register']);
+
+    Route::middleware('jwt')->group(function () {
+        Route::get('/me', [AuthController::class, 'me']);
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::post('/refresh', [AuthController::class, 'refresh']);
+    });
+});
 
 // Rutas de Tickets
 Route::prefix('tickets')->group(function () {
