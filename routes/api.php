@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\DepartamentoController;
 use App\Http\Controllers\PermisoController;
 use App\Http\Controllers\CategoriaController;
@@ -48,6 +49,14 @@ Route::prefix('tickets')->group(function () {
     Route::put('/{id}', [TicketController::class, 'update']);
     Route::delete('/{id}', [TicketController::class, 'destroy']);
     Route::post('/{id}/resolve', [TicketController::class, 'resolve']);
+});
+
+// Rutas de Comentarios
+Route::get('/tickets/{id}/comentarios', [ComentarioController::class, 'getByTicket']);
+Route::prefix('comentarios')->group(function () {
+    Route::get('/', [ComentarioController::class, 'index']);
+    Route::post('/', [ComentarioController::class, 'store']);
+    Route::delete('/{id}', [ComentarioController::class, 'destroy']);
 });
 
 // Rutas de Backups

@@ -53,7 +53,7 @@ class Comentario extends Model
     public function obtenerUrlEvidencia()
     {
         if ($this->tieneEvidencia()) {
-            return asset('storage/tickets/' . $this->ticket_id . '/' . $this->evidencia);
+            return asset('storage/tickets/' . $this->ticket_id . '/comentarios/' . $this->evidencia);
         }
         return null;
     }
