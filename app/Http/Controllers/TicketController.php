@@ -5,9 +5,39 @@ namespace App\Http\Controllers;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class TicketController extends Controller
 {
+    private function formatTicket(Ticket $ticket, ?int $forceId = null): array
+    {
+        $attrs = $ticket->getAttributes();
+        $rawId = $attrs['id'] ?? null;
+
+        // Documentos viejos pueden tener id como ObjectId — descartar en ese caso
+        if ($rawId instanceof \MongoDB\BSON\ObjectId) {
+            $rawId = null;
+        }
+
+        $id = $forceId ?? (is_numeric($rawId) ? (int) $rawId : null);
+
+        return [
+            'id'               => $id,
+            'titulo'           => $ticket->titulo,
+            'descripcion'      => $ticket->descripcion,
+            'prioridad'        => $ticket->prioridad,
+            'fecha_creacion'   => $ticket->fecha_creacion,
+            'fecha_asignacion' => $ticket->fecha_asignacion,
+            'fecha_resolucion' => $ticket->fecha_resolucion,
+            'usuario_autor_id' => $ticket->usuario_autor_id,
+            'categoria_id'     => $ticket->categoria_id,
+            'departamento_id'  => $ticket->departamento_id,
+            'comentarios'      => $ticket->comentarios ?? [],
+            'archivo_path'     => $ticket->archivo_path,
+            'estado'           => $this->determinarEstado($ticket),
+        ];
+    }
+
     /**
      * Obtener todos los tickets
      */
@@ -15,24 +45,9 @@ class TicketController extends Controller
     {
         try {
             $tickets = Ticket::all();
-            
+
             // Agregar el campo estado calculado y formatear datos
-            $tickets = $tickets->map(function ($ticket) {
-                return [
-                    'id' => $ticket->id,
-                    'titulo' => $ticket->titulo,
-                    'descripcion' => $ticket->descripcion,
-                    'prioridad' => $ticket->prioridad,
-                    'fecha_creacion' => $ticket->fecha_creacion,
-                    'fecha_asignacion' => $ticket->fecha_asignacion,
-                    'fecha_resolucion' => $ticket->fecha_resolucion,
-                    'usuario_autor_id' => $ticket->usuario_autor_id,
-                    'categoria_id' => $ticket->categoria_id,
-                    'comentarios' => $ticket->comentarios ?? [],
-                    'archivo_path' => $ticket->archivo_path,
-                    'estado' => $this->determinarEstado($ticket),
-                ];
-            });
+            $tickets = $tickets->map(fn($ticket) => $this->formatTicket($ticket));
 
             return response()->json([
                 'data' => $tickets,
@@ -51,31 +66,14 @@ class TicketController extends Controller
     {
         try {
             $ticket = Ticket::find($id);
-            
+
             if (!$ticket) {
                 return response()->json([
                     'error' => 'Ticket no encontrado',
                 ], 404);
             }
 
-            $data = [
-                'id' => $ticket->id,
-                'titulo' => $ticket->titulo,
-                'descripcion' => $ticket->descripcion,
-                'prioridad' => $ticket->prioridad,
-                'fecha_creacion' => $ticket->fecha_creacion,
-                'fecha_asignacion' => $ticket->fecha_asignacion,
-                'fecha_resolucion' => $ticket->fecha_resolucion,
-                'usuario_autor_id' => $ticket->usuario_autor_id,
-                'categoria_id' => $ticket->categoria_id,
-                'comentarios' => $ticket->comentarios ?? [],
-                'archivo_path' => $ticket->archivo_path,
-                'estado' => $this->determinarEstado($ticket),
-            ];
-
-            return response()->json([
-                'data' => $data,
-            ]);
+            return response()->json(['data' => $this->formatTicket($ticket)]);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Ticket no encontrado: ' . $e->getMessage(),
@@ -110,26 +108,24 @@ class TicketController extends Controller
                 $validated['archivo_path'] = $path;
             }
 
+            // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->tickets->find(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1], 'limit' => 1]
+            )->toArray();
+            $nextId = !empty($lastDoc) ? ((int) $lastDoc[0]['id'] + 1) : 1;
+
             $ticket = Ticket::create($validated);
 
-            $data = [
-                'id' => $ticket->id,
-                'titulo' => $ticket->titulo,
-                'descripcion' => $ticket->descripcion,
-                'prioridad' => $ticket->prioridad,
-                'fecha_creacion' => $ticket->fecha_creacion,
-                'fecha_asignacion' => $ticket->fecha_asignacion,
-                'fecha_resolucion' => $ticket->fecha_resolucion,
-                'usuario_autor_id' => $ticket->usuario_autor_id,
-                'categoria_id' => $ticket->categoria_id,
-                'departamento_id' => $ticket->departamento_id,
-                'comentarios' => $ticket->comentarios ?? [],
-                'archivo_path' => $ticket->archivo_path,
-                'estado' => $this->determinarEstado($ticket),
-            ];
+            // Asignar id numérico via driver nativo para evitar mapeo id→_id de laravel-mongodb
+            $mongoDB->tickets->updateOne(
+                ['_id' => new \MongoDB\BSON\ObjectId((string) $ticket->_id)],
+                ['$set' => ['id' => $nextId]]
+            );
 
             return response()->json([
-                'data' => $data,
+                'data'    => $this->formatTicket($ticket, $nextId),
                 'message' => 'Ticket creado exitosamente',
             ], 201);
         } catch (\Exception $e) {
@@ -146,7 +142,7 @@ class TicketController extends Controller
     {
         try {
             $ticket = Ticket::find($id);
-            
+
             if (!$ticket) {
                 return response()->json([
                     'error' => 'Ticket no encontrado',
@@ -178,24 +174,8 @@ class TicketController extends Controller
 
             $ticket->update($validated);
 
-            $data = [
-                'id' => $ticket->id,
-                'titulo' => $ticket->titulo,
-                'descripcion' => $ticket->descripcion,
-                'prioridad' => $ticket->prioridad,
-                'fecha_creacion' => $ticket->fecha_creacion,
-                'fecha_asignacion' => $ticket->fecha_asignacion,
-                'fecha_resolucion' => $ticket->fecha_resolucion,
-                'usuario_autor_id' => $ticket->usuario_autor_id,
-                'categoria_id' => $ticket->categoria_id,
-                'departamento_id' => $ticket->departamento_id,
-                'comentarios' => $ticket->comentarios ?? [],
-                'archivo_path' => $ticket->archivo_path,
-                'estado' => $this->determinarEstado($ticket),
-            ];
-
             return response()->json([
-                'data' => $data,
+                'data'    => $this->formatTicket($ticket),
                 'message' => 'Ticket actualizado exitosamente',
             ]);
         } catch (\Exception $e) {
@@ -212,13 +192,13 @@ class TicketController extends Controller
     {
         try {
             $ticket = Ticket::find($id);
-            
+
             if (!$ticket) {
                 return response()->json([
                     'error' => 'Ticket no encontrado',
                 ], 404);
             }
-            
+
             $ticket->delete();
 
             return response()->json([
@@ -252,34 +232,18 @@ class TicketController extends Controller
     {
         try {
             $ticket = Ticket::find($id);
-            
+
             if (!$ticket) {
                 return response()->json([
                     'error' => 'Ticket no encontrado',
                 ], 404);
             }
-            
+
             $ticket->fecha_resolucion = now();
             $ticket->save();
 
-            $data = [
-                'id' => $ticket->id,
-                'titulo' => $ticket->titulo,
-                'descripcion' => $ticket->descripcion,
-                'prioridad' => $ticket->prioridad,
-                'fecha_creacion' => $ticket->fecha_creacion,
-                'fecha_asignacion' => $ticket->fecha_asignacion,
-                'fecha_resolucion' => $ticket->fecha_resolucion,
-                'departamento_id' => $ticket->departamento_id,
-                'usuario_autor_id' => $ticket->usuario_autor_id,
-                'categoria_id' => $ticket->categoria_id,
-                'departamento_id' => $ticket->departamento_id,
-                'comentarios' => $ticket->comentarios ?? [],
-                'estado' => $this->determinarEstado($ticket),
-            ];
-
             return response()->json([
-                'data' => $data,
+                'data'    => $this->formatTicket($ticket),
                 'message' => 'Ticket marcado como resuelto',
             ]);
         } catch (\Exception $e) {
@@ -296,7 +260,7 @@ class TicketController extends Controller
     {
         try {
             $tickets = Ticket::all();
-            
+
             $stats = [
                 'total' => $tickets->count(),
                 'abiertos' => 0,
@@ -315,7 +279,7 @@ class TicketController extends Controller
                 if (isset($stats[$estado])) {
                     $stats[$estado]++;
                 }
-                
+
                 if (isset($ticket->prioridad) && isset($stats['por_prioridad'][$ticket->prioridad])) {
                     $stats['por_prioridad'][$ticket->prioridad]++;
                 }

@@ -7,6 +7,7 @@ use App\Helpers\VigenereHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -20,6 +21,7 @@ class AuthController extends Controller
     }
 
    
+
 
     public function login(Request $request)
     {
@@ -60,6 +62,7 @@ class AuthController extends Controller
             $passwordValid = false;
             
 
+
             try {
                 $decryptedPassword = VigenereHelper::decrypt($user->contrasena);
                 if ($decryptedPassword === $request->password) {
@@ -89,7 +92,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => $user->id,
+                    'id' => (int) ($user->getAttributes()['id'] ?? 0),
                     'nombre' => $user->nombre,
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,
@@ -145,6 +148,18 @@ class AuthController extends Controller
                 'permisos' => [],
             ]);
 
+            // Asignar id numérico via driver nativo (laravel-mongodb mapea id→_id en queries)
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->usuarios->find(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1], 'limit' => 1]
+            )->toArray();
+            $nextId  = !empty($lastDoc) ? ((int) $lastDoc[0]['id'] + 1) : 1;
+            $mongoDB->usuarios->updateOne(
+                ['_id' => new \MongoDB\BSON\ObjectId((string) $user->_id)],
+                ['$set' => ['id' => $nextId]]
+            );
+
             $token = $this->generateToken($user);
 
             return response()->json([
@@ -153,7 +168,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => $user->id,
+                    'id' => $nextId,
                     'nombre' => $user->nombre,
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,

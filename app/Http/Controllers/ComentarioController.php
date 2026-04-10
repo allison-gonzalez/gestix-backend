@@ -59,22 +59,46 @@ class ComentarioController extends Controller
 
     public function getByTicket($ticketId)
     {
-        $ticket = Ticket::find($ticketId);
+        $ticketId = (int) $ticketId;
 
-        if (!$ticket) {
+        // Verificar que el ticket existe usando driver nativo (evita traducción id→_id de laravel-mongodb)
+        $mongoDB   = DB::connection('mongodb')->getMongoDB();
+        $ticketDoc = $mongoDB->tickets->findOne(['id' => $ticketId]);
+
+        if (!$ticketDoc) {
             return response()->json(['error' => 'Ticket no encontrado'], 404);
         }
 
-        $comentarios = Comentario::where('ticket_id', $ticketId)
-            ->orderBy('fecha', 'asc')
-            ->get();
+        // Buscar comentarios por ticket_id numérico usando driver nativo
+        $docs = $mongoDB->comentarios->find(
+            ['ticket_id' => $ticketId],
+            ['sort' => ['fecha' => 1]]
+        )->toArray();
 
-        $ids        = $comentarios->pluck('usuario_autor_id')->map(fn($id) => (int) $id)->unique()->values()->toArray();
-        $nombresMap = $this->getNombresMap($ids);
+        $autorIds   = array_unique(array_map(fn($d) => (int) ($d['usuario_autor_id'] ?? 0), $docs));
+        $nombresMap = $this->getNombresMap(array_values($autorIds));
 
-        return response()->json([
-            'data' => $comentarios->map(fn($c) => $this->formatComentario($c, $nombresMap)),
-        ]);
+        $data = array_map(function ($doc) use ($nombresMap) {
+            $id      = isset($doc['id']) ? (int) $doc['id'] : (string) $doc['_id'];
+            $autorId = (int) ($doc['usuario_autor_id'] ?? 0);
+            $evidencia = $doc['evidencia'] ?? null;
+            $urlEvidencia = $evidencia
+                ? asset('storage/tickets/' . ($doc['ticket_id'] ?? '') . '/comentarios/' . $evidencia)
+                : null;
+
+            return [
+                'id'                   => $id,
+                'comentario'           => $doc['comentario'] ?? '',
+                'evidencia'            => $evidencia,
+                'ticket_id'            => (int) ($doc['ticket_id'] ?? 0),
+                'usuario_autor_id'     => $autorId,
+                'usuario_autor_nombre' => $nombresMap[$autorId] ?? 'Usuario desconocido',
+                'fecha'                => isset($doc['fecha']) ? (string) $doc['fecha'] : null,
+                'url_evidencia'        => $urlEvidencia,
+            ];
+        }, $docs);
+
+        return response()->json(['data' => $data]);
     }
 
     public function store(Request $request)
@@ -86,15 +110,13 @@ class ComentarioController extends Controller
             'evidencia' => 'nullable|file|max:20480',
         ]);
 
-        $ticketId = $validated['ticket_id'];
-        $ticket = Ticket::find($ticketId);
-        if (!$ticket) {
-            $ticket = Ticket::where('_id', $ticketId)
-                ->orWhere('id', $ticketId)
-                ->first();
-        }
+        $ticketId = (int) $validated['ticket_id'];
 
-        if (!$ticket) {
+        // Buscar ticket por id numérico via driver nativo (laravel-mongodb traduce where('id') → _id)
+        $mongoDB   = DB::connection('mongodb')->getMongoDB();
+        $ticketDoc = $mongoDB->tickets->findOne(['id' => $ticketId]);
+
+        if (!$ticketDoc) {
             return response()->json([
                 'error' => 'Ticket no encontrado',
             ], 404);
@@ -103,24 +125,28 @@ class ComentarioController extends Controller
         if ($request->hasFile('evidencia')) {
             $file = $request->file('evidencia');
             $filename = time() . '_' . $file->getClientOriginalName();
-            $file->storeAs('tickets/' . $validated['ticket_id'] . '/comentarios', $filename, 'public');
+            $file->storeAs('tickets/' . $ticketId . '/comentarios', $filename, 'public');
             $validated['evidencia'] = $filename;
         }
 
         $validated['fecha'] = now();
+        $validated['ticket_id'] = $ticketId;
         $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
 
-        // Calcular siguiente ID
-        $nextId = (Comentario::max('id') ?? 0) + 1;
+        // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
+        $lastDoc = $mongoDB->comentarios->find(
+            ['id' => ['$type' => 'int']],
+            ['sort' => ['id' => -1], 'limit' => 1]
+        )->toArray();
+        $nextId = !empty($lastDoc) ? ((int) $lastDoc[0]['id'] + 1) : 1;
 
         // Crear sin `id` (MongoDB genera ObjectId como _id automáticamente)
         $comentario = new Comentario($validated);
         $comentario->save();
 
         // Setear el campo `id` via driver MongoDB nativo para evitar el mapeo id→_id de laravel-mongodb
-        $mongoDB = DB::connection('mongodb')->getMongoDB();
         $mongoDB->comentarios->updateOne(
-            ['_id' => $comentario->_id],
+            ['_id' => new \MongoDB\BSON\ObjectId((string) $comentario->_id)],
             ['$set' => ['id' => $nextId]]
         );
         return response()->json([

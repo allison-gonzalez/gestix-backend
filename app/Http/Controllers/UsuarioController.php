@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Usuario;
 use App\Helpers\VigenereHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class UsuarioController extends Controller
 {
@@ -50,10 +51,24 @@ class UsuarioController extends Controller
             $validated['departamento_id'] = $validated['departamento_id'] ?? null;
             $validated['permisos']        = $validated['permisos'] ?? [];
 
+            // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->usuarios->find(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1], 'limit' => 1]
+            )->toArray();
+            $nextId  = !empty($lastDoc) ? ((int) $lastDoc[0]['id'] + 1) : 1;
+
             $usuario = Usuario::create($validated);
 
+            // Asignar id numérico via driver nativo para evitar mapeo id→_id de laravel-mongodb
+            $mongoDB->usuarios->updateOne(
+                ['_id' => new \MongoDB\BSON\ObjectId((string) $usuario->_id)],
+                ['$set' => ['id' => $nextId]]
+            );
+
             return response()->json([
-                'data'    => $this->formatUsuario($usuario),
+                'data'    => $this->formatUsuario($usuario, $nextId),
                 'message' => 'Usuario creado exitosamente',
             ], 201);
         } catch (\Exception $e) {
@@ -130,12 +145,21 @@ class UsuarioController extends Controller
         }
     }
 
-    private function formatUsuario(Usuario $u): array
+    private function formatUsuario(Usuario $u, ?int $forceId = null): array
     {
         $attrs = $u->getAttributes();
+        $rawId = $attrs['id'] ?? null;
+
+        // Documentos viejos pueden tener id como ObjectId — descartar en ese caso
+        if ($rawId instanceof \MongoDB\BSON\ObjectId) {
+            $rawId = null;
+        }
+
+        $numericId = $forceId ?? (is_numeric($rawId) ? (int) $rawId : null);
+
         return [
             '_id'             => (string) ($u->_id ?? ''),
-            'id'              => (string) ($u->_id ?? ''),
+            'id'              => $numericId,
             'nombre'          => $attrs['nombre']          ?? null,
             'correo'          => $attrs['correo']          ?? null,
             'telefono'        => $attrs['telefono']        ?? null,
