@@ -20,7 +20,7 @@ class AuthController extends Controller
         $this->secret_key = env('JWT_SECRET', config('app.key'));
     }
 
-   
+
 
 
     public function login(Request $request)
@@ -60,7 +60,7 @@ class AuthController extends Controller
             }
 
             $passwordValid = false;
-            
+
 
 
             try {
@@ -97,7 +97,7 @@ class AuthController extends Controller
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,
                     'estatus' => $user->estatus,
-                    'departamento_id' => $user->departamento_id,
+                    'departamento_id' => (int) ($user->departamento_id ?? 0),
                     'permisos' => $user->permisos,
                 ],
             ], 200);

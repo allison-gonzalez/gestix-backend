@@ -9,6 +9,22 @@ use Illuminate\Support\Facades\DB;
 
 class TicketController extends Controller
 {
+    private function findByNumericId(int $id): ?Ticket
+    {
+        $mongoDB = DB::connection('mongodb')->getMongoDB();
+        // Buscar con $or para tolerar id guardado como int, double o string
+        $doc = $mongoDB->tickets->findOne([
+            '$or' => [
+                ['id' => $id],
+                ['id' => (float) $id],
+                ['id' => (string) $id],
+            ]
+        ]);
+        if (!$doc) return null;
+        // Pasar el ObjectId directamente para evitar problemas de cast string→ObjectId
+        return Ticket::where('_id', $doc['_id'])->first();
+    }
+
     private function formatTicket(Ticket $ticket, ?int $forceId = null): array
     {
         $attrs = $ticket->getAttributes();
@@ -29,9 +45,10 @@ class TicketController extends Controller
             'fecha_creacion'   => $ticket->fecha_creacion,
             'fecha_asignacion' => $ticket->fecha_asignacion,
             'fecha_resolucion' => $ticket->fecha_resolucion,
-            'usuario_autor_id' => $ticket->usuario_autor_id,
+            'usuario_autor_id' => (int) $ticket->usuario_autor_id,
             'categoria_id'     => $ticket->categoria_id,
-            'departamento_id'  => $ticket->departamento_id,
+            'departamento_id'  => (int) $ticket->departamento_id,
+            'asignado_a_id'    => $ticket->asignado_a_id ? (int) $ticket->asignado_a_id : null,
             'comentarios'      => $ticket->comentarios ?? [],
             'archivo_path'     => $ticket->archivo_path,
             'estado'           => $this->determinarEstado($ticket),
@@ -65,7 +82,7 @@ class TicketController extends Controller
     public function show($id)
     {
         try {
-            $ticket = Ticket::find($id);
+            $ticket = $this->findByNumericId((int) $id);
 
             if (!$ticket) {
                 return response()->json([
@@ -92,11 +109,14 @@ class TicketController extends Controller
                 'descripcion' => 'required|string',
                 'prioridad' => 'required|in:baja,media,alta,critica',
                 'categoria_id' => 'required|string',
-                'departamento_id' => 'required|string',
-                'departamento_id' => 'required|string',
-                'usuario_autor_id' => 'required|string',
+                'departamento_id' => 'required|numeric',
+                'usuario_autor_id' => 'required|integer',
                 'archivo' => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240', // 10MB max
             ]);
+
+            // Asegurar que los IDs sean integers
+            $validated['departamento_id'] = (int) $validated['departamento_id'];
+            $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
 
             $validated['fecha_creacion'] = now();
 
@@ -141,7 +161,7 @@ class TicketController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            $ticket = Ticket::find($id);
+            $ticket = $this->findByNumericId((int) $id);
 
             if (!$ticket) {
                 return response()->json([
@@ -153,12 +173,21 @@ class TicketController extends Controller
                 'titulo' => 'string|max:255',
                 'descripcion' => 'string',
                 'prioridad' => 'in:baja,media,alta,critica',
-                'departamento_id' => 'string',
+                'departamento_id' => 'nullable|numeric',
                 'categoria_id' => 'string',
+                'asignado_a_id' => 'nullable|integer',
                 'fecha_asignacion' => 'nullable|date',
                 'fecha_resolucion' => 'nullable|date',
                 'archivo' => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240',
             ]);
+
+            // Asegurar que los IDs sean integers
+            if (isset($validated['departamento_id'])) {
+                $validated['departamento_id'] = (int) $validated['departamento_id'];
+            }
+            if (array_key_exists('asignado_a_id', $validated)) {
+                $validated['asignado_a_id'] = $validated['asignado_a_id'] !== null ? (int) $validated['asignado_a_id'] : null;
+            }
 
             // Manejar archivo si existe
             if ($request->hasFile('archivo')) {
@@ -172,7 +201,18 @@ class TicketController extends Controller
                 $validated['archivo_path'] = $path;
             }
 
-            $ticket->update($validated);
+            // Guardar directamente con driver nativo para evitar problemas de dirty-tracking de Eloquent con MongoDB
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $mongoDB->tickets->updateOne(
+                ['$or' => [
+                    ['id' => (int) $id],
+                    ['id' => (float) $id],
+                    ['id' => (string) $id],
+                ]],
+                ['$set' => $validated]
+            );
+            // Recargar usando findByNumericId para evitar que refresh() use Eloquent find
+            $ticket = $this->findByNumericId((int) $id);
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket),
@@ -191,7 +231,7 @@ class TicketController extends Controller
     public function destroy($id)
     {
         try {
-            $ticket = Ticket::find($id);
+            $ticket = $this->findByNumericId((int) $id);
 
             if (!$ticket) {
                 return response()->json([

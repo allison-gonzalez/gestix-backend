@@ -33,6 +33,11 @@ class ComentarioController extends Controller
         $attrs   = $comentario->getAttributes();
         $autorId = (int) $comentario->usuario_autor_id;
 
+        $fecha = $comentario->fecha;
+        $fechaStr = $fecha instanceof \MongoDB\BSON\UTCDateTime
+            ? $fecha->toDateTime()->format('c')
+            : ($fecha ? (string) $fecha : null);
+
         return [
             'id'                   => $attrs['id'] ?? (string) $comentario->_id,
             'comentario'           => $comentario->comentario,
@@ -40,7 +45,7 @@ class ComentarioController extends Controller
             'ticket_id'            => $comentario->ticket_id,
             'usuario_autor_id'     => $autorId,
             'usuario_autor_nombre' => $nombresMap[$autorId] ?? 'Usuario desconocido',
-            'fecha'                => $comentario->fecha,
+            'fecha'                => $fechaStr,
             'url_evidencia'        => $comentario->obtenerUrlEvidencia(),
         ];
     }
@@ -93,7 +98,11 @@ class ComentarioController extends Controller
                 'ticket_id'            => (int) ($doc['ticket_id'] ?? 0),
                 'usuario_autor_id'     => $autorId,
                 'usuario_autor_nombre' => $nombresMap[$autorId] ?? 'Usuario desconocido',
-                'fecha'                => isset($doc['fecha']) ? (string) $doc['fecha'] : null,
+                'fecha'                => isset($doc['fecha'])
+                    ? ($doc['fecha'] instanceof \MongoDB\BSON\UTCDateTime
+                        ? $doc['fecha']->toDateTime()->format('c')
+                        : (string) $doc['fecha'])
+                    : null,
                 'url_evidencia'        => $urlEvidencia,
             ];
         }, $docs);
@@ -157,7 +166,9 @@ class ComentarioController extends Controller
                 'ticket_id'            => $comentario->ticket_id,
                 'usuario_autor_id'     => $comentario->usuario_autor_id,
                 'usuario_autor_nombre' => $this->getNombresMap([(int) $validated['usuario_autor_id']])[(int) $validated['usuario_autor_id']] ?? 'Usuario desconocido',
-                'fecha'                => $comentario->fecha,
+                'fecha'                => $comentario->fecha instanceof \MongoDB\BSON\UTCDateTime
+                    ? $comentario->fecha->toDateTime()->format('c')
+                    : ($comentario->fecha ? (string) $comentario->fecha : null),
                 'url_evidencia'        => $comentario->obtenerUrlEvidencia(),
             ],
             'message' => 'Comentario creado exitosamente',

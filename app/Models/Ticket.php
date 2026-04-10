@@ -17,6 +17,7 @@ class Ticket extends Model
         'fecha_asignacion',
         'fecha_resolucion',
         'usuario_autor_id',
+        'asignado_a_id',
         'categoria_id',
         'departamento_id',
         'comentarios',
