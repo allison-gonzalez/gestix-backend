@@ -48,16 +48,23 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Verificación de contraseña (cifrada o texto plano)
+            if ($user->estatus !== 1) {
+                \Log::warning('Usuario inactivo intentando hacer login', ['user_id' => $user->_id, 'estatus' => $user->estatus]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tu cuenta está desactivada. Contacta al administrador.',
+                ], 401);
+            }
+
             $passwordValid = false;
             
-            if (VigenereHelper::verify($request->password, $user->contrasena)) {
-                $passwordValid = true;
-                \Log::info('Login exitoso con contraseña cifrada', ['user_id' => $user->_id]);
-            }
-            elseif ($user->contrasena === $request->password) {
-                $passwordValid = true;
-                \Log::info('Login exitoso con contraseña plana (modo prueba)', ['user_id' => $user->_id]);
+            try {
+                $decryptedPassword = VigenereHelper::decrypt($user->contrasena);
+                if ($decryptedPassword === $request->password) {
+                    $passwordValid = true;
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Error al descifrar contraseña', ['user_id' => $user->_id, 'error' => $e->getMessage()]);
             }
 
             if (!$passwordValid) {
@@ -118,7 +125,6 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            // Verificar si el correo ya existe
             $existingUser = Usuario::where('correo', $request->email)->first();
             if ($existingUser) {
                 return response()->json([
