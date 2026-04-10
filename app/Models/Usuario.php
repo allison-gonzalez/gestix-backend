@@ -8,6 +8,9 @@ class Usuario extends Model
 {
     protected $connection = 'mongodb';
     protected $collection = 'usuarios';
+    protected $primaryKey = 'id';
+    public $incrementing = false;
+    protected $keyType = 'int';
 
     protected $fillable = [
         'nombre',

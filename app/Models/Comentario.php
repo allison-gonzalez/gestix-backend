@@ -18,6 +18,7 @@ class Comentario extends Model
     ];
 
     protected $casts = [
+        'id' => 'integer',
         'usuario_autor_id' => 'integer',
         'ticket_id' => 'integer',
         'fecha' => 'datetime',

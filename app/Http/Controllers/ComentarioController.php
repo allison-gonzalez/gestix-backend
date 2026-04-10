@@ -6,28 +6,55 @@ use App\Models\Comentario;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class ComentarioController extends Controller
 {
+    private function getNombresMap(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $mongoDB = DB::connection('mongodb')->getMongoDB();
+        $docs    = $mongoDB->usuarios->find(['id' => ['$in' => $ids]])->toArray();
+
+        $map = [];
+        foreach ($docs as $doc) {
+            if (isset($doc['id'])) {
+                $map[(int) $doc['id']] = (string) $doc['nombre'];
+            }
+        }
+        return $map;
+    }
+
+    private function formatComentario(Comentario $comentario, array $nombresMap = []): array
+    {
+        $attrs   = $comentario->getAttributes();
+        $autorId = (int) $comentario->usuario_autor_id;
+
+        return [
+            'id'                   => $attrs['id'] ?? (string) $comentario->_id,
+            'comentario'           => $comentario->comentario,
+            'evidencia'            => $comentario->evidencia,
+            'ticket_id'            => $comentario->ticket_id,
+            'usuario_autor_id'     => $autorId,
+            'usuario_autor_nombre' => $nombresMap[$autorId] ?? 'Usuario desconocido',
+            'fecha'                => $comentario->fecha,
+            'url_evidencia'        => $comentario->obtenerUrlEvidencia(),
+        ];
+    }
+
     public function index()
     {
-        $comentarios = Comentario::with('usuarioAutor')
-            ->orderBy('fecha', 'asc')
-            ->get()
-            ->map(function ($comentario) {
-                return [
-                    'id' => $comentario->id,
-                    'comentario' => $comentario->comentario,
-                    'evidencia' => $comentario->evidencia,
-                    'ticket_id' => $comentario->ticket_id,
-                    'usuario_autor_id' => $comentario->usuario_autor_id,
-                    'usuario_autor_nombre' => $comentario->usuarioAutor?->nombre ?? 'Usuario desconocido',
-                    'fecha' => $comentario->fecha,
-                    'url_evidencia' => $comentario->obtenerUrlEvidencia(),
-                ];
-            });
+        $comentarios = Comentario::orderBy('fecha', 'asc')->get();
 
-        return response()->json(['data' => $comentarios]);
+        $ids        = $comentarios->pluck('usuario_autor_id')->map(fn($id) => (int) $id)->unique()->values()->toArray();
+        $nombresMap = $this->getNombresMap($ids);
+
+        return response()->json([
+            'data' => $comentarios->map(fn($c) => $this->formatComentario($c, $nombresMap)),
+        ]);
     }
 
     public function getByTicket($ticketId)
@@ -35,29 +62,19 @@ class ComentarioController extends Controller
         $ticket = Ticket::find($ticketId);
 
         if (!$ticket) {
-            return response()->json([
-                'error' => 'Ticket no encontrado',
-            ], 404);
+            return response()->json(['error' => 'Ticket no encontrado'], 404);
         }
 
         $comentarios = Comentario::where('ticket_id', $ticketId)
-            ->with('usuarioAutor')
             ->orderBy('fecha', 'asc')
-            ->get()
-            ->map(function ($comentario) {
-                return [
-                    'id' => $comentario->id,
-                    'comentario' => $comentario->comentario,
-                    'evidencia' => $comentario->evidencia,
-                    'ticket_id' => $comentario->ticket_id,
-                    'usuario_autor_id' => $comentario->usuario_autor_id,
-                    'usuario_autor_nombre' => $comentario->usuarioAutor?->nombre ?? 'Usuario desconocido',
-                    'fecha' => $comentario->fecha,
-                    'url_evidencia' => $comentario->obtenerUrlEvidencia(),
-                ];
-            });
+            ->get();
 
-        return response()->json(['data' => $comentarios]);
+        $ids        = $comentarios->pluck('usuario_autor_id')->map(fn($id) => (int) $id)->unique()->values()->toArray();
+        $nombresMap = $this->getNombresMap($ids);
+
+        return response()->json([
+            'data' => $comentarios->map(fn($c) => $this->formatComentario($c, $nombresMap)),
+        ]);
     }
 
     public function store(Request $request)
@@ -91,20 +108,31 @@ class ComentarioController extends Controller
         }
 
         $validated['fecha'] = now();
+        $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
 
-        $comentario = Comentario::create($validated);
-        $comentario->load('usuarioAutor');
+        // Calcular siguiente ID
+        $nextId = (Comentario::max('id') ?? 0) + 1;
 
+        // Crear sin `id` (MongoDB genera ObjectId como _id automáticamente)
+        $comentario = new Comentario($validated);
+        $comentario->save();
+
+        // Setear el campo `id` via driver MongoDB nativo para evitar el mapeo id→_id de laravel-mongodb
+        $mongoDB = DB::connection('mongodb')->getMongoDB();
+        $mongoDB->comentarios->updateOne(
+            ['_id' => $comentario->_id],
+            ['$set' => ['id' => $nextId]]
+        );
         return response()->json([
             'data' => [
-                'id' => $comentario->id,
-                'comentario' => $comentario->comentario,
-                'evidencia' => $comentario->evidencia,
-                'ticket_id' => $comentario->ticket_id,
-                'usuario_autor_id' => $comentario->usuario_autor_id,
-                'usuario_autor_nombre' => $comentario->usuarioAutor?->nombre ?? 'Usuario desconocido',
-                'fecha' => $comentario->fecha,
-                'url_evidencia' => $comentario->obtenerUrlEvidencia(),
+                'id'                   => $nextId,
+                'comentario'           => $comentario->comentario,
+                'evidencia'            => $comentario->evidencia,
+                'ticket_id'            => $comentario->ticket_id,
+                'usuario_autor_id'     => $comentario->usuario_autor_id,
+                'usuario_autor_nombre' => $this->getNombresMap([(int) $validated['usuario_autor_id']])[(int) $validated['usuario_autor_id']] ?? 'Usuario desconocido',
+                'fecha'                => $comentario->fecha,
+                'url_evidencia'        => $comentario->obtenerUrlEvidencia(),
             ],
             'message' => 'Comentario creado exitosamente',
         ], 201);

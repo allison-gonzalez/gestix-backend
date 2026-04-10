@@ -20,6 +20,7 @@ class AuthController extends Controller
     }
 
    
+
     public function login(Request $request)
     {
         try {
@@ -58,6 +59,7 @@ class AuthController extends Controller
 
             $passwordValid = false;
             
+
             try {
                 $decryptedPassword = VigenereHelper::decrypt($user->contrasena);
                 if ($decryptedPassword === $request->password) {
@@ -87,7 +89,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => $user->_id,
+                    'id' => $user->id,
                     'nombre' => $user->nombre,
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,
@@ -105,7 +107,7 @@ class AuthController extends Controller
         }
     }
 
-   
+
     public function register(Request $request)
     {
         try {
@@ -151,7 +153,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => $user->_id,
+                    'id' => $user->id,
                     'nombre' => $user->nombre,
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,
@@ -169,7 +171,7 @@ class AuthController extends Controller
         }
     }
 
-    
+
     public function me(Request $request)
     {
         try {
@@ -199,7 +201,7 @@ class AuthController extends Controller
         }
     }
 
-   
+
     public function logout()
     {
         return response()->json([
@@ -208,7 +210,7 @@ class AuthController extends Controller
         ], 200);
     }
 
-    
+
     public function refresh(Request $request)
     {
         try {
@@ -237,7 +239,7 @@ class AuthController extends Controller
         }
     }
 
-   
+
     private function generateToken(Usuario $user)
     {
         $issuedAt = time();
@@ -258,7 +260,7 @@ class AuthController extends Controller
         return JWT::encode($payload, $this->secret_key, 'HS256');
     }
 
-   
+
     public static function verifyToken($token)
     {
         try {
