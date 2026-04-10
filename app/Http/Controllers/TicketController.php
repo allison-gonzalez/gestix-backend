@@ -173,6 +173,7 @@ class TicketController extends Controller
                 'titulo' => 'string|max:255',
                 'descripcion' => 'string',
                 'prioridad' => 'in:baja,media,alta,critica',
+                'estado' => 'in:abierto,en_progreso,resuelto,cerrado',
                 'departamento_id' => 'nullable|numeric',
                 'categoria_id' => 'string',
                 'asignado_a_id' => 'nullable|integer',
