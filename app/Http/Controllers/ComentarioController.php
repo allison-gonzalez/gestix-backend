@@ -83,18 +83,32 @@ class ComentarioController extends Controller
         $autorIds   = array_unique(array_map(fn($d) => (int) ($d['usuario_autor_id'] ?? 0), $docs));
         $nombresMap = $this->getNombresMap(array_values($autorIds));
 
-        $data = array_map(function ($doc) use ($nombresMap) {
+        // Obtener archivos de todos los comentarios en un solo query
+        $commentIds = array_values(array_filter(
+            array_map(fn($d) => isset($d['id']) ? (int) $d['id'] : null, $docs)
+        ));
+        $archivosDocs = !empty($commentIds)
+            ? $mongoDB->archivos->find(
+                ['tipo_entidad' => 'comentario', 'entidad_id' => ['$in' => $commentIds]]
+              )->toArray()
+            : [];
+        $archivosMap = [];
+        foreach ($archivosDocs as $ad) {
+            $archivosMap[(int) $ad['entidad_id']][] = [
+                'id'              => isset($ad['id']) ? (int) $ad['id'] : null,
+                'nombre_original' => $ad['nombre_original'] ?? null,
+                'url'             => asset('storage/' . ($ad['ruta'] ?? '')),
+            ];
+        }
+
+        $data = array_map(function ($doc) use ($nombresMap, $archivosMap) {
             $id      = isset($doc['id']) ? (int) $doc['id'] : (string) $doc['_id'];
             $autorId = (int) ($doc['usuario_autor_id'] ?? 0);
-            $evidencia = $doc['evidencia'] ?? null;
-            $urlEvidencia = $evidencia
-                ? asset('storage/tickets/' . ($doc['ticket_id'] ?? '') . '/comentarios/' . $evidencia)
-                : null;
+            $comentarioArchivos = $archivosMap[$id] ?? [];
 
             return [
                 'id'                   => $id,
                 'comentario'           => $doc['comentario'] ?? '',
-                'evidencia'            => $evidencia,
                 'ticket_id'            => (int) ($doc['ticket_id'] ?? 0),
                 'usuario_autor_id'     => $autorId,
                 'usuario_autor_nombre' => $nombresMap[$autorId] ?? 'Usuario desconocido',
@@ -103,7 +117,12 @@ class ComentarioController extends Controller
                         ? $doc['fecha']->toDateTime()->format('c')
                         : (string) $doc['fecha'])
                     : null,
-                'url_evidencia'        => $urlEvidencia,
+                'archivos'             => $comentarioArchivos,
+                'url_evidencia'        => isset($comentarioArchivos[0])
+                    ? $comentarioArchivos[0]['url']
+                    : (isset($doc['evidencia'])
+                        ? asset('storage/tickets/' . ($doc['ticket_id'] ?? '') . '/comentarios/' . $doc['evidencia'])
+                        : null),
             ];
         }, $docs);
 
@@ -138,6 +157,9 @@ class ComentarioController extends Controller
             $validated['evidencia'] = $filename;
         }
 
+        // Extraer evidencia del validated (se guarda en colección archivos)
+        unset($validated['evidencia']);
+
         $validated['fecha'] = now();
         $validated['ticket_id'] = $ticketId;
         $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
@@ -158,6 +180,10 @@ class ComentarioController extends Controller
             ['_id' => new \MongoDB\BSON\ObjectId((string) $comentario->_id)],
             ['$set' => ['id' => $nextId]]
         );
+
+        // Guardar evidencia en colección archivos
+        $this->guardarArchivo($request, 'evidencia', 'comentario', $nextId);
+
         return response()->json([
             'data' => [
                 'id'                   => $nextId,
@@ -185,9 +211,15 @@ class ComentarioController extends Controller
             ], 404);
         }
 
-        if ($comentario->evidencia) {
-            Storage::disk('public')->delete('tickets/' . $comentario->ticket_id . '/comentarios/' . $comentario->evidencia);
+        // Eliminar archivos asociados de la colección archivos
+        $mongoDB = DB::connection('mongodb')->getMongoDB();
+        $archivosToDelete = $mongoDB->archivos->find(
+            ['tipo_entidad' => 'comentario', 'entidad_id' => (int) $comentario->id]
+        )->toArray();
+        foreach ($archivosToDelete as $archivo) {
+            Storage::disk('public')->delete($archivo['ruta'] ?? '');
         }
+        $mongoDB->archivos->deleteMany(['tipo_entidad' => 'comentario', 'entidad_id' => (int) $comentario->id]);
 
         $comentario->delete();
 

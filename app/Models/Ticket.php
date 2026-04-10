@@ -21,7 +21,6 @@ class Ticket extends Model
         'categoria_id',
         'departamento_id',
         'comentarios',
-        'archivo_path',
     ];
 
     protected $casts = [
@@ -33,7 +32,6 @@ class Ticket extends Model
         'departamentoutor_id' => 'string',
         'categoria_id' => 'string',
         'departamento_id' => 'string',
-        'archivo_path' => 'string',
     ];
 
     /**

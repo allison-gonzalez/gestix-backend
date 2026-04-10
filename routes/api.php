@@ -11,6 +11,7 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Controllers\ArchivoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -59,6 +60,10 @@ Route::prefix('comentarios')->group(function () {
     Route::delete('/{id}', [ComentarioController::class, 'destroy']);
 });
 
+// Rutas de Archivos
+Route::get('/archivos/{tipo}/{id}', [ArchivoController::class, 'getByEntidad']);
+Route::delete('/archivos/{id}', [ArchivoController::class, 'destroy']);
+
 // Rutas de Backups
 Route::prefix('backup')->group(function () {
     Route::get('/info',       [BackupController::class, 'info']);
@@ -92,4 +97,3 @@ Route::prefix('usuarios')->group(function () {
     Route::delete('/{id}',       [UsuarioController::class, 'destroy']);
     Route::post('/{id}/verify-password', [UsuarioController::class, 'verifyPassword']);
 });
- 

@@ -50,7 +50,7 @@ class TicketController extends Controller
             'departamento_id'  => (int) $ticket->departamento_id,
             'asignado_a_id'    => $ticket->asignado_a_id ? (int) $ticket->asignado_a_id : null,
             'comentarios'      => $ticket->comentarios ?? [],
-            'archivo_path'     => $ticket->archivo_path,
+            'archivo_path'     => $ticket->archivo_path ?? null,
             'estado'           => $this->determinarEstado($ticket),
         ];
     }
@@ -118,15 +118,10 @@ class TicketController extends Controller
             $validated['departamento_id'] = (int) $validated['departamento_id'];
             $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
 
-            $validated['fecha_creacion'] = now();
+            // El archivo no debe ir al documento del ticket
+            unset($validated['archivo']);
 
-            // Manejar archivo si existe
-            if ($request->hasFile('archivo')) {
-                $file = $request->file('archivo');
-                $filename = time() . '_' . $file->getClientOriginalName();
-                $path = $file->storeAs('tickets', $filename, 'public');
-                $validated['archivo_path'] = $path;
-            }
+            $validated['fecha_creacion'] = now();
 
             // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
             $mongoDB = DB::connection('mongodb')->getMongoDB();
@@ -143,6 +138,9 @@ class TicketController extends Controller
                 ['_id' => new \MongoDB\BSON\ObjectId((string) $ticket->_id)],
                 ['$set' => ['id' => $nextId]]
             );
+
+            // Guardar archivo en colección archivos
+            $this->guardarArchivo($request, 'archivo', 'ticket', $nextId);
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket, $nextId),
@@ -190,17 +188,8 @@ class TicketController extends Controller
                 $validated['asignado_a_id'] = $validated['asignado_a_id'] !== null ? (int) $validated['asignado_a_id'] : null;
             }
 
-            // Manejar archivo si existe
-            if ($request->hasFile('archivo')) {
-                // Eliminar archivo anterior si existe
-                if ($ticket->archivo_path) {
-                    \Storage::disk('public')->delete($ticket->archivo_path);
-                }
-                $file = $request->file('archivo');
-                $filename = time() . '_' . $file->getClientOriginalName();
-                $path = $file->storeAs('tickets', $filename, 'public');
-                $validated['archivo_path'] = $path;
-            }
+            // El archivo no debe ir al $set de MongoDB
+            unset($validated['archivo']);
 
             // Guardar directamente con driver nativo para evitar problemas de dirty-tracking de Eloquent con MongoDB
             $mongoDB = DB::connection('mongodb')->getMongoDB();
@@ -214,6 +203,9 @@ class TicketController extends Controller
             );
             // Recargar usando findByNumericId para evitar que refresh() use Eloquent find
             $ticket = $this->findByNumericId((int) $id);
+
+            // Guardar nuevo archivo en colección archivos si fue enviado
+            $this->guardarArchivo($request, 'archivo', 'ticket', (int) $id);
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket),
@@ -241,6 +233,16 @@ class TicketController extends Controller
             }
 
             $ticket->delete();
+
+            // Eliminar archivos asociados de la colección archivos
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $archivosToDelete = $mongoDB->archivos->find(
+                ['tipo_entidad' => 'ticket', 'entidad_id' => (int) $id]
+            )->toArray();
+            foreach ($archivosToDelete as $archivo) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($archivo['ruta'] ?? '');
+            }
+            $mongoDB->archivos->deleteMany(['tipo_entidad' => 'ticket', 'entidad_id' => (int) $id]);
 
             return response()->json([
                 'message' => 'Ticket eliminado exitosamente',
