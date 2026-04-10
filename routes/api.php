@@ -10,6 +10,7 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Controllers\ProfileController; // Importado correctamente
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +37,9 @@ Route::prefix('auth')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
+        
+        // --- RUTA DE TU PERFIL (CAMBIO DE CONTRASEÑA) ---
+        Route::post('/user/update-password', [ProfileController.class, 'updatePassword']);
     });
 });
 
@@ -83,4 +87,3 @@ Route::prefix('usuarios')->group(function () {
     Route::delete('/{id}',       [UsuarioController::class, 'destroy']);
     Route::post('/{id}/verify-password', [UsuarioController::class, 'verifyPassword']);
 });
- 
