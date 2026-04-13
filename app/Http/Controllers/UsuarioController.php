@@ -35,21 +35,22 @@ class UsuarioController extends Controller
     public function store(Request $request)
     {
         try {
-            $data = $request->all();
+            $validated = $request->validate([
+                'nombre'          => 'required|string|max:255',
+                'correo'          => 'required|string',
+                'telefono'        => 'nullable|string|max:20',
+                'contrasena'      => 'required|string|min:4',
+                'estatus'         => 'required',
+                'departamento_id' => 'nullable',
+                'permisos'        => 'nullable|array',
+            ]);
 
-            if (empty($data['nombre']) || empty($data['correo']) || empty($data['contrasena'])) {
-                return response()->json(['error' => 'Nombre, correo y contraseña son obligatorios'], 422);
-            }
+            $validated['estatus']         = (int) $validated['estatus'];
+            $validated['contrasena']      = VigenereHelper::encrypt($validated['contrasena']);
+            $validated['departamento_id'] = $validated['departamento_id'] ?? null;
+            $validated['permisos']        = $validated['permisos'] ?? [];
 
-            $usuario                  = new Usuario();
-            $usuario->nombre          = $data['nombre'];
-            $usuario->correo          = $data['correo'];
-            $usuario->telefono        = $data['telefono']        ?? null;
-            $usuario->estatus         = (int) ($data['estatus']  ?? 1);
-            $usuario->departamento_id = $data['departamento_id'] ?? null;
-            $usuario->permisos        = $this->normalizarPermisos($data['permisos'] ?? []);
-            $usuario->contrasena      = VigenereHelper::encrypt($data['contrasena']);
-            $usuario->save();
+            $usuario = Usuario::create($validated);
 
             return response()->json([
                 'data'    => $this->formatUsuario($usuario),
@@ -68,21 +69,22 @@ class UsuarioController extends Controller
                 return response()->json(['error' => 'Usuario no encontrado'], 404);
             }
 
-            $data = $request->all();
+            $data = $request->only([
+                'nombre', 'correo', 'telefono',
+                'contrasena', 'estatus', 'departamento_id', 'permisos',
+            ]);
 
-            // Actualizar campo a campo — evita problemas con $hidden y MongoDB
-            if (isset($data['nombre']))                     $usuario->nombre          = $data['nombre'];
-            if (isset($data['correo']))                     $usuario->correo          = $data['correo'];
-            if (array_key_exists('telefono', $data))        $usuario->telefono        = $data['telefono'];
-            if (isset($data['estatus']))                    $usuario->estatus         = (int) $data['estatus'];
-            if (array_key_exists('departamento_id', $data)) $usuario->departamento_id = $data['departamento_id'];
-            if (isset($data['permisos']))                   $usuario->permisos        = $this->normalizarPermisos($data['permisos']);
-
-            // Solo encriptar si se proporciona una nueva contraseña no vacía
-            if (!empty($data['contrasena'])) {
-                $usuario->contrasena = VigenereHelper::encrypt($data['contrasena']);
+            if (isset($data['estatus'])) {
+                $data['estatus'] = (int) $data['estatus'];
             }
 
+            if (!empty($data['contrasena'])) {
+                $data['contrasena'] = VigenereHelper::encrypt($data['contrasena']);
+            } else {
+                unset($data['contrasena']);
+            }
+
+            $usuario->fill($data);
             $usuario->save();
 
             $fresh = Usuario::find($id);
@@ -117,38 +119,20 @@ class UsuarioController extends Controller
             if (!$usuario) {
                 return response()->json(['error' => 'Usuario no encontrado'], 404);
             }
+
             $contrasena = $request->input('contrasena', '');
             $stored     = $usuario->getAttributes()['contrasena'] ?? null;
             $valid      = $stored ? VigenereHelper::verify($contrasena, $stored) : false;
+
             return response()->json(['valid' => $valid]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
     }
 
-    /**
-     * Normaliza permisos: convierte BSONArray, objeto o cualquier cosa a array PHP limpio.
-     */
-    private function normalizarPermisos($val): array
-    {
-        if (is_null($val)) return [];
-        if (is_array($val)) return array_values($val);
-        // BSONArray u objeto iterable
-        if (is_object($val) && method_exists($val, 'getIterator')) {
-            return array_values(iterator_to_array($val));
-        }
-        // Fallback: cast
-        return array_values((array) $val);
-    }
-
-    /**
-     * Formatea un usuario para la respuesta JSON.
-     * Siempre devuelve permisos como array JSON limpio (nunca BSONArray).
-     */
     private function formatUsuario(Usuario $u): array
     {
         $attrs = $u->getAttributes();
-
         return [
             '_id'             => (string) ($u->_id ?? ''),
             'id'              => (string) ($u->_id ?? ''),
@@ -157,7 +141,7 @@ class UsuarioController extends Controller
             'telefono'        => $attrs['telefono']        ?? null,
             'estatus'         => (int)   ($attrs['estatus']  ?? 0),
             'departamento_id' => $attrs['departamento_id'] ?? null,
-            'permisos'        => $this->normalizarPermisos($attrs['permisos'] ?? []),
+            'permisos'        => $attrs['permisos']        ?? [],
         ];
     }
 }
