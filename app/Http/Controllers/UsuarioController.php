@@ -99,6 +99,29 @@ class UsuarioController extends Controller
                 unset($data['contrasena']);
             }
 
+            // Update integer/array fields via native driver to avoid BSON dirty-tracking issues
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $setFields = [];
+            if (array_key_exists('permisos', $data)) {
+                $setFields['permisos'] = array_values(array_map('intval', $data['permisos']));
+                unset($data['permisos']);
+            }
+            if (array_key_exists('estatus', $data)) {
+                $setFields['estatus'] = (int) $data['estatus'];
+                unset($data['estatus']);
+            }
+            if (array_key_exists('departamento_id', $data)) {
+                $setFields['departamento_id'] = $data['departamento_id'] !== null ? (int) $data['departamento_id'] : null;
+                unset($data['departamento_id']);
+            }
+
+            if (!empty($setFields)) {
+                $mongoDB->usuarios->updateOne(
+                    ['_id' => new \MongoDB\BSON\ObjectId((string) $usuario->_id)],
+                    ['$set' => $setFields]
+                );
+            }
+
             $usuario->fill($data);
             $usuario->save();
 
