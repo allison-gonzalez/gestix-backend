@@ -19,7 +19,12 @@ abstract class Controller
 
         $file             = $request->file($campo);
         $nombreOriginal   = $file->getClientOriginalName();
-        $nombreAlmacenado = time() . '_' . $nombreOriginal;
+
+        // Sanitizar: reemplazar espacios y caracteres especiales para evitar 403 en URLs
+        $extension        = $file->getClientOriginalExtension();
+        $baseName         = pathinfo($nombreOriginal, PATHINFO_FILENAME);
+        $baseSanitizado   = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $baseName);
+        $nombreAlmacenado = time() . '_' . $baseSanitizado . '.' . $extension;
         $ruta             = "archivos/{$tipo}/{$entidadId}/{$nombreAlmacenado}";
 
         $file->storeAs("archivos/{$tipo}/{$entidadId}", $nombreAlmacenado, 'public');

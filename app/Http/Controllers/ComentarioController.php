@@ -150,14 +150,7 @@ class ComentarioController extends Controller
             ], 404);
         }
 
-        if ($request->hasFile('evidencia')) {
-            $file = $request->file('evidencia');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $file->storeAs('tickets/' . $ticketId . '/comentarios', $filename, 'public');
-            $validated['evidencia'] = $filename;
-        }
-
-        // Extraer evidencia del validated (se guarda en colección archivos)
+        // El archivo se guarda en colección archivos, no en el documento del comentario
         unset($validated['evidencia']);
 
         $validated['fecha'] = now();
@@ -184,18 +177,29 @@ class ComentarioController extends Controller
         // Guardar evidencia en colección archivos
         $this->guardarArchivo($request, 'evidencia', 'comentario', $nextId);
 
+        // Obtener URL del archivo recién guardado
+        $archivoDoc = $mongoDB->archivos->findOne(
+            ['tipo_entidad' => 'comentario', 'entidad_id' => $nextId],
+            ['sort' => ['fecha_subida' => -1]]
+        );
+        $urlEvidencia = $archivoDoc ? asset('storage/' . $archivoDoc['ruta']) : null;
+
         return response()->json([
             'data' => [
                 'id'                   => $nextId,
                 'comentario'           => $comentario->comentario,
-                'evidencia'            => $comentario->evidencia,
                 'ticket_id'            => $comentario->ticket_id,
                 'usuario_autor_id'     => $comentario->usuario_autor_id,
                 'usuario_autor_nombre' => $this->getNombresMap([(int) $validated['usuario_autor_id']])[(int) $validated['usuario_autor_id']] ?? 'Usuario desconocido',
                 'fecha'                => $comentario->fecha instanceof \MongoDB\BSON\UTCDateTime
                     ? $comentario->fecha->toDateTime()->format('c')
                     : ($comentario->fecha ? (string) $comentario->fecha : null),
-                'url_evidencia'        => $comentario->obtenerUrlEvidencia(),
+                'archivos'             => $archivoDoc ? [[
+                    'id'              => (int) $archivoDoc['id'],
+                    'nombre_original' => $archivoDoc['nombre_original'],
+                    'url'             => $urlEvidencia,
+                ]] : [],
+                'url_evidencia'        => $urlEvidencia,
             ],
             'message' => 'Comentario creado exitosamente',
         ], 201);

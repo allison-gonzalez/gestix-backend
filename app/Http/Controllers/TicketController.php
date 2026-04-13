@@ -25,7 +25,7 @@ class TicketController extends Controller
         return Ticket::where('_id', $doc['_id'])->first();
     }
 
-    private function formatTicket(Ticket $ticket, ?int $forceId = null): array
+    private function formatTicket(Ticket $ticket, ?int $forceId = null, array $archivos = []): array
     {
         $attrs = $ticket->getAttributes();
         $rawId = $attrs['id'] ?? null;
@@ -51,8 +51,31 @@ class TicketController extends Controller
             'asignado_a_id'    => $ticket->asignado_a_id ? (int) $ticket->asignado_a_id : null,
             'comentarios'      => $ticket->comentarios ?? [],
             'archivo_path'     => $ticket->archivo_path ?? null,
+            'archivos'         => $archivos,
             'estado'           => $this->determinarEstado($ticket),
         ];
+    }
+
+    private function getArchivosForTicket(int $ticketId): array
+    {
+        $mongoDB = DB::connection('mongodb')->getMongoDB();
+        $docs    = $mongoDB->archivos->find(
+            [
+                'tipo_entidad' => 'ticket',
+                '$or' => [
+                    ['entidad_id' => $ticketId],
+                    ['entidad_id' => (float) $ticketId],
+                    ['entidad_id' => (string) $ticketId],
+                ],
+            ],
+            ['sort' => ['fecha_subida' => 1]]
+        )->toArray();
+
+        return array_map(fn($doc) => [
+            'id'              => isset($doc['id']) ? (int) $doc['id'] : null,
+            'nombre_original' => $doc['nombre_original'] ?? null,
+            'url'             => asset('storage/' . ($doc['ruta'] ?? '')),
+        ], $docs);
     }
 
     /**
@@ -90,7 +113,9 @@ class TicketController extends Controller
                 ], 404);
             }
 
-            return response()->json(['data' => $this->formatTicket($ticket)]);
+            $archivos = $this->getArchivosForTicket((int) $id);
+
+            return response()->json(['data' => $this->formatTicket($ticket, null, $archivos)]);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Ticket no encontrado: ' . $e->getMessage(),
@@ -142,8 +167,11 @@ class TicketController extends Controller
             // Guardar archivo en colección archivos
             $this->guardarArchivo($request, 'archivo', 'ticket', $nextId);
 
+            // Incluir archivos en la respuesta del store
+            $archivos = $this->getArchivosForTicket($nextId);
+
             return response()->json([
-                'data'    => $this->formatTicket($ticket, $nextId),
+                'data'    => $this->formatTicket($ticket, $nextId, $archivos),
                 'message' => 'Ticket creado exitosamente',
             ], 201);
         } catch (\Exception $e) {

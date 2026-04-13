@@ -29,7 +29,14 @@ class ArchivoController extends Controller
     {
         $mongoDB = DB::connection('mongodb')->getMongoDB();
         $docs    = $mongoDB->archivos->find(
-            ['tipo_entidad' => $tipo, 'entidad_id' => $id],
+            [
+                'tipo_entidad' => $tipo,
+                '$or' => [
+                    ['entidad_id' => (int) $id],
+                    ['entidad_id' => (float) $id],
+                    ['entidad_id' => (string) $id],
+                ],
+            ],
             ['sort' => ['fecha_subida' => 1]]
         )->toArray();
 
