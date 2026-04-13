@@ -40,7 +40,7 @@ class UsuarioController extends Controller
                 'nombre'          => 'required|string|max:255',
                 'correo'          => 'required|string',
                 'telefono'        => 'nullable|string|max:20',
-                'contrasena'      => 'required|string|min:4',
+                'contrasena'      => ['required', 'string', 'min:8', 'regex:/[A-Z]/', 'regex:/[a-z]/', 'regex:/[0-9]/', 'regex:/[^A-Za-z0-9]/'],
                 'estatus'         => 'required',
                 'departamento_id' => 'nullable',
                 'permisos'        => 'nullable|array',
