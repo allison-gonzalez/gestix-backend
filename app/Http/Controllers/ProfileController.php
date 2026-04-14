@@ -4,49 +4,76 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Helpers\VigenereHelper;
 
 class ProfileController extends Controller
 {
-    public function updatePassword(Request $request)
+    public function updateProfile(Request $request)
     {
         $request->validate([
-            'current' => 'required',
-            'new' => 'required|min:8',
+            'nombre'   => 'required|string|max:100',
+            'correo'   => 'required|email|max:150',
+            'telefono' => 'nullable|string|max:20',
         ]);
 
         $user = Auth::user();
-        $key = env('VIGENERE_KEY', 'gestix-secure-key-vigenere-cipher');
-
-        // 1. Cifrar la contraseña actual recibida para comparar con la DB
-        $encryptedCurrent = $this->vigenereCipher($request->current, $key);
-
-        if ($user->contrasena !== $encryptedCurrent) {
-            return response()->json(['message' => 'La contraseña actual es incorrecta'], 400);
+        $user->nombre   = $request->nombre;
+        $user->correo   = $request->correo;
+        if ($request->has('telefono')) {
+            $user->telefono = $request->telefono;
         }
-
-        // 2. Cifrar la nueva contraseña y guardar
-        $user->contrasena = $this->vigenereCipher($request->new, $key);
         $user->save();
 
-        return response()->json(['message' => '¡Contraseña actualizada con éxito!']);
+        return response()->json([
+            'message' => 'Perfil actualizado correctamente',
+            'user'    => [
+                'id'              => $user->id,
+                'nombre'          => $user->nombre,
+                'correo'          => $user->correo,
+                'telefono'        => $user->telefono,
+                'estatus'         => $user->estatus,
+                'departamento_id' => $user->departamento_id,
+                'permisos'        => $user->permisos,
+            ],
+        ]);
     }
 
-    private function vigenereCipher($text, $key)
+    public function updatePassword(Request $request)
     {
-        $text = strtoupper($text);
-        $key = strtoupper($key);
-        $encrypted = '';
-        $j = 0;
+        $request->validate([
+            'current' => 'required|string',
+            'new'     => [
+                'required',
+                'string',
+                'min:8',
+                'regex:/[a-z]/',
+                'regex:/[A-Z]/',
+                'regex:/[^a-zA-Z0-9]/',
+            ],
+        ], [
+            'new.min'    => 'La contraseña debe tener al menos 8 caracteres.',
+            'new.regex'  => 'La contraseña debe contener mayúsculas, minúsculas y un carácter especial.',
+        ]);
 
-        for ($i = 0; $i < strlen($text); $i++) {
-            $char = $text[$i];
-            if (ctype_alpha($char)) {
-                $encrypted .= chr(((ord($char) - 65 + ord($key[$j % strlen($key)]) - 65) % 26) + 65);
-                $j++;
-            } else {
-                $encrypted .= $char;
+        $user = Auth::user();
+
+        // 1. Verificar la contraseña actual
+        try {
+            $decryptedCurrent = VigenereHelper::decrypt($user->contrasena);
+            if ($decryptedCurrent !== $request->current) {
+                return response()->json(['message' => 'La contraseña actual es incorrecta'], 400);
             }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al verificar la contraseña'], 400);
         }
-        return $encrypted;
+
+        // 2. Encriptar la nueva contraseña y guardar
+        try {
+            $user->contrasena = VigenereHelper::encrypt($request->new);
+            $user->save();
+            return response()->json(['message' => '¡Contraseña actualizada con éxito!']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al actualizar la contraseña'], 500);
+        }
     }
 }

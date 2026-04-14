@@ -39,9 +39,8 @@ Route::prefix('auth')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
-        
-        // --- RUTA DE TU PERFIL (CAMBIO DE CONTRASEÑA) ---
-        Route::post('/user/update-password', [ProfileController.class, 'updatePassword']);
+        Route::post('/user/update-password', [ProfileController::class, 'updatePassword']);
+        Route::put('/user/update-profile', [ProfileController::class, 'updateProfile']);
     });
 });
 
