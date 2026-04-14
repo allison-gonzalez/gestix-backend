@@ -11,13 +11,13 @@ class Comentario extends Model
 
     protected $fillable = [
         'comentario',
-        'evidencia',
         'usuario_autor_id',
         'ticket_id',
         'fecha',
     ];
 
     protected $casts = [
+        'id' => 'integer',
         'usuario_autor_id' => 'integer',
         'ticket_id' => 'integer',
         'fecha' => 'datetime',
@@ -53,7 +53,7 @@ class Comentario extends Model
     public function obtenerUrlEvidencia()
     {
         if ($this->tieneEvidencia()) {
-            return asset('storage/tickets/' . $this->ticket_id . '/' . $this->evidencia);
+            return asset('storage/tickets/' . $this->ticket_id . '/comentarios/' . $this->evidencia);
         }
         return null;
     }

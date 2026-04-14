@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Usuario;
 use App\Helpers\VigenereHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class UsuarioController extends Controller
 {
@@ -39,9 +40,9 @@ class UsuarioController extends Controller
                 'nombre'          => 'required|string|max:255',
                 'correo'          => 'required|string',
                 'telefono'        => 'nullable|string|max:20',
-                'contrasena'      => 'required|string|min:4',
+                'contrasena'      => ['required', 'string', 'min:8', 'regex:/[A-Z]/', 'regex:/[a-z]/', 'regex:/[0-9]/', 'regex:/[^A-Za-z0-9]/'],
                 'estatus'         => 'required',
-                'departamento_id' => 'nullable',
+                'departamento_id' => 'nullable|integer',
                 'permisos'        => 'nullable|array',
             ]);
 
@@ -50,10 +51,21 @@ class UsuarioController extends Controller
             $validated['departamento_id'] = $validated['departamento_id'] ?? null;
             $validated['permisos']        = $validated['permisos'] ?? [];
 
+            // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->usuarios->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1]]
+            );
+            $nextId  = $lastDoc ? ((int) $lastDoc['id'] + 1) : 1;
+
+            // Asignar id numérico antes de crear
+            $validated['id'] = $nextId;
+
             $usuario = Usuario::create($validated);
 
             return response()->json([
-                'data'    => $this->formatUsuario($usuario),
+                'data'    => $this->formatUsuario($usuario, $nextId),
                 'message' => 'Usuario creado exitosamente',
             ], 201);
         } catch (\Exception $e) {
@@ -82,6 +94,29 @@ class UsuarioController extends Controller
                 $data['contrasena'] = VigenereHelper::encrypt($data['contrasena']);
             } else {
                 unset($data['contrasena']);
+            }
+
+            // Update integer/array fields via native driver to avoid BSON dirty-tracking issues
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $setFields = [];
+            if (array_key_exists('permisos', $data)) {
+                $setFields['permisos'] = array_values(array_map('intval', $data['permisos']));
+                unset($data['permisos']);
+            }
+            if (array_key_exists('estatus', $data)) {
+                $setFields['estatus'] = (int) $data['estatus'];
+                unset($data['estatus']);
+            }
+            if (array_key_exists('departamento_id', $data)) {
+                $setFields['departamento_id'] = $data['departamento_id'] !== null ? (int) $data['departamento_id'] : null;
+                unset($data['departamento_id']);
+            }
+
+            if (!empty($setFields)) {
+                $mongoDB->usuarios->updateOne(
+                    ['_id' => new \MongoDB\BSON\ObjectId((string) $usuario->_id)],
+                    ['$set' => $setFields]
+                );
             }
 
             $usuario->fill($data);
@@ -130,12 +165,21 @@ class UsuarioController extends Controller
         }
     }
 
-    private function formatUsuario(Usuario $u): array
+    private function formatUsuario(Usuario $u, ?int $forceId = null): array
     {
         $attrs = $u->getAttributes();
+        $rawId = $attrs['id'] ?? null;
+
+        // Documentos viejos pueden tener id como ObjectId — descartar en ese caso
+        if ($rawId instanceof \MongoDB\BSON\ObjectId) {
+            $rawId = null;
+        }
+
+        $numericId = $forceId ?? (is_numeric($rawId) ? (int) $rawId : null);
+
         return [
             '_id'             => (string) ($u->_id ?? ''),
-            'id'              => (string) ($u->_id ?? ''),
+            'id'              => $numericId,
             'nombre'          => $attrs['nombre']          ?? null,
             'correo'          => $attrs['correo']          ?? null,
             'telefono'        => $attrs['telefono']        ?? null,
