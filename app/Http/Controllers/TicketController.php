@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ticket;
+use App\Models\Notificacion;
+use App\Models\Usuario;
+use App\Events\NuevaNotificacion;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -130,18 +133,23 @@ class TicketController extends Controller
     {
         try {
             $validated = $request->validate([
-                'titulo' => 'required|string|max:255',
-                'descripcion' => 'required|string',
-                'prioridad' => 'required|in:baja,media,alta,critica',
-                'categoria_id' => 'required|string',
+                'titulo'          => 'required|string|max:255',
+                'descripcion'     => 'required|string',
+                'prioridad'       => 'required|in:baja,media,alta,critica',
+                'categoria_id'    => 'required|string',
                 'departamento_id' => 'required|numeric',
-                'usuario_autor_id' => 'required|integer',
-                'archivo' => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240', // 10MB max
+                'archivo'         => 'nullable|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx|max:10240',
             ]);
 
-            // Asegurar que los IDs sean integers
-            $validated['departamento_id'] = (int) $validated['departamento_id'];
-            $validated['usuario_autor_id'] = (int) $validated['usuario_autor_id'];
+            // Usar el id autenticado del JWT (evita confiar en datos del cliente
+            // y soluciona el caso donde authUser.id sea un ObjectId en el frontend)
+            $autorId = (int) $request->attributes->get('user_id');
+            if (!$autorId) {
+                return response()->json(['error' => 'No se pudo determinar el usuario autenticado.'], 401);
+            }
+
+            $validated['departamento_id']  = (int) $validated['departamento_id'];
+            $validated['usuario_autor_id'] = $autorId;
 
             // El archivo no debe ir al documento del ticket
             unset($validated['archivo']);
@@ -169,6 +177,9 @@ class TicketController extends Controller
 
             // Incluir archivos en la respuesta del store
             $archivos = $this->getArchivosForTicket($nextId);
+
+            // Notificar a usuarios con permiso asignar_ticket (id=4)
+            $this->notificarAsignadores($nextId, (int) $validated['usuario_autor_id'], $validated['titulo']);
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket, $nextId, $archivos),
@@ -234,6 +245,22 @@ class TicketController extends Controller
 
             // Guardar nuevo archivo en colección archivos si fue enviado
             $this->guardarArchivo($request, 'archivo', 'ticket', (int) $id);
+
+            // Notificar asignación si cambió asignado_a_id
+            if (array_key_exists('asignado_a_id', $validated) && $validated['asignado_a_id'] !== null) {
+                $nuevoAsignado = (int) $validated['asignado_a_id'];
+                $autorId = (int) ($ticket->getAttributes()['usuario_autor_id'] ?? 0);
+                $emisorId = (int) ($request->attributes->get('user_id') ?? 0);
+                $this->crearYBroadcast([
+                    'tipo'        => 'ticket_asignado',
+                    'titulo'      => 'Ticket asignado',
+                    'mensaje'     => "Se te ha asignado el ticket #{$id}: {$ticket->titulo}",
+                    'receptor_id' => $nuevoAsignado,
+                    'emisor_id'   => $emisorId,
+                    'ticket_id'   => (int) $id,
+                    'leida'       => false,
+                ]);
+            }
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket),
@@ -313,6 +340,21 @@ class TicketController extends Controller
             $ticket->fecha_resolucion = now();
             $ticket->save();
 
+            // Notificar al autor del ticket
+            $autorId = (int) ($ticket->getAttributes()['usuario_autor_id'] ?? 0);
+            $emisorId = (int) ($request->attributes->get('user_id') ?? 0);
+            if ($autorId) {
+                $this->crearYBroadcast([
+                    'tipo'        => 'ticket_resuelto',
+                    'titulo'      => 'Ticket resuelto',
+                    'mensaje'     => "Tu ticket #{$id}: {$ticket->titulo} ha sido marcado como resuelto.",
+                    'receptor_id' => $autorId,
+                    'emisor_id'   => $emisorId,
+                    'ticket_id'   => (int) $id,
+                    'leida'       => false,
+                ]);
+            }
+
             return response()->json([
                 'data'    => $this->formatTicket($ticket),
                 'message' => 'Ticket marcado como resuelto',
@@ -363,6 +405,56 @@ class TicketController extends Controller
             return response()->json([
                 'error' => 'Error al obtener estadísticas: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers de notificaciones
+    // -------------------------------------------------------------------------
+
+    /**
+     * Crea un registro en notificaciones y dispara el evento WebSocket.
+     */
+    private function crearYBroadcast(array $data): void
+    {
+        try {
+            $notif = Notificacion::create($data);
+            broadcast(new NuevaNotificacion(array_merge($data, [
+                'id'         => (string) $notif->_id,
+                'created_at' => $notif->created_at?->toISOString(),
+            ])));
+        } catch (\Exception $e) {
+            \Log::warning('Error al crear/broadcast notificación: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Notifica a todos los usuarios con permiso asignar_ticket (id=4)
+     * cuando se crea un ticket nuevo, excluyendo al autor.
+     */
+    private function notificarAsignadores(int $ticketId, int $autorId, string $titulo): void
+    {
+        try {
+            $gestores = Usuario::where('estatus', 1)
+                ->where('permisos', 4)
+                ->get();
+
+            foreach ($gestores as $gestor) {
+                $gestorId = (int) $gestor->id;
+                if ($gestorId === $autorId) continue;
+
+                $this->crearYBroadcast([
+                    'tipo'        => 'ticket_creado',
+                    'titulo'      => 'Nuevo ticket',
+                    'mensaje'     => "Se creó el ticket #{$ticketId}: {$titulo}",
+                    'receptor_id' => $gestorId,
+                    'emisor_id'   => $autorId,
+                    'ticket_id'   => $ticketId,
+                    'leida'       => false,
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Error al notificar asignadores: ' . $e->getMessage());
         }
     }
 }

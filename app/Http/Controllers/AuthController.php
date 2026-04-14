@@ -350,13 +350,20 @@ class AuthController extends Controller
         $issuedAt = time();
         $expire = $issuedAt + (60 * 60 * 24); // 24 horas
 
+        // With $primaryKey='id', getAttributes()['id'] equals MongoDB's _id.
+        // For properly created users _id is Int32; for legacy users it's an ObjectId.
+        $rawId = $user->getAttributes()['id'] ?? null;
+        $userId = (!($rawId instanceof \MongoDB\BSON\ObjectId) && is_numeric($rawId))
+            ? (int) $rawId
+            : (string) ($rawId ?? $user->_id);
+
         $payload = [
             'iat' => $issuedAt,
             'exp' => $expire,
             'iss' => config('app.url'),
             'sub' => $user->_id,
             'data' => [
-                'id' => $user->_id,
+                'id' => $userId,
                 'nombre' => $user->nombre,
                 'correo' => $user->correo,
             ],
