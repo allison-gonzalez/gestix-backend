@@ -178,8 +178,13 @@ class TicketController extends Controller
             // Incluir archivos en la respuesta del store
             $archivos = $this->getArchivosForTicket($nextId);
 
-            // Notificar a usuarios con permiso asignar_ticket (id=4)
-            $this->notificarAsignadores($nextId, (int) $validated['usuario_autor_id'], $validated['titulo']);
+            // Notificar a usuarios con permiso asignar_ticket (id=4) del mismo departamento
+            $this->notificarAsignadores(
+                $nextId,
+                (int) $validated['usuario_autor_id'],
+                $validated['titulo'],
+                (int) $validated['departamento_id']
+            );
 
             return response()->json([
                 'data'    => $this->formatTicket($ticket, $nextId, $archivos),
@@ -429,19 +434,44 @@ class TicketController extends Controller
     }
 
     /**
-     * Notifica a todos los usuarios con permiso asignar_ticket (id=4)
-     * cuando se crea un ticket nuevo, excluyendo al autor.
+     * Notifica a usuarios con permiso asignar_ticket (id=4)
+     * que pertenezcan al mismo departamento del ticket, excluyendo al autor.
      */
-    private function notificarAsignadores(int $ticketId, int $autorId, string $titulo): void
+    private function notificarAsignadores(int $ticketId, int $autorId, string $titulo, int $departamentoId): void
     {
         try {
+            // Buscar por el campo 'id' numérico separado (usuarios legacy) y por '_id' Int32 (usuarios nuevos)
+            // Laravel-mongodb traduce where('permisos', 4) → array contains check
             $gestores = Usuario::where('estatus', 1)
                 ->where('permisos', 4)
+                ->where('departamento_id', $departamentoId)
                 ->get();
 
             foreach ($gestores as $gestor) {
-                $gestorId = (int) $gestor->id;
-                if ($gestorId === $autorId) continue;
+                // Obtener id numérico real: puede estar en 'id' como campo separado (legacy)
+                // o directamente en el primaryKey mapeado
+                $rawId = $gestor->getAttributes()['id'] ?? null;
+                $gestorId = (is_numeric($rawId) && !($rawId instanceof \MongoDB\BSON\ObjectId))
+                    ? (int) $rawId
+                    : null;
+
+                // Fallback: buscar campo 'id' numérico via nativo para usuarios legacy
+                if ($gestorId === null) {
+                    try {
+                        $mongoDB = DB::connection('mongodb')->getMongoDB();
+                        $doc = $mongoDB->usuarios->findOne(
+                            ['_id' => new \MongoDB\BSON\ObjectId((string) $gestor->_id)],
+                            ['projection' => ['id' => 1]]
+                        );
+                        if ($doc && isset($doc['id']) && is_numeric($doc['id'])) {
+                            $gestorId = (int) $doc['id'];
+                        }
+                    } catch (\Exception $e) {
+                        \Log::warning('Error obteniendo id numérico de gestor: ' . $e->getMessage());
+                    }
+                }
+
+                if ($gestorId === null || $gestorId === $autorId) continue;
 
                 $this->crearYBroadcast([
                     'tipo'        => 'ticket_creado',

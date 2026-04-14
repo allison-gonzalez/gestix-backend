@@ -90,15 +90,15 @@ class UsuarioController extends Controller
                 $data['estatus'] = (int) $data['estatus'];
             }
 
-            if (!empty($data['contrasena'])) {
-                $data['contrasena'] = VigenereHelper::encrypt($data['contrasena']);
-            } else {
-                unset($data['contrasena']);
-            }
-
-            // Update integer/array fields via native driver to avoid BSON dirty-tracking issues
+            // Update via native driver to avoid BSON dirty-tracking issues with laravel-mongodb
             $mongoDB = DB::connection('mongodb')->getMongoDB();
             $setFields = [];
+
+            if (!empty($data['contrasena'])) {
+                $setFields['contrasena'] = VigenereHelper::encrypt($data['contrasena']);
+            }
+            unset($data['contrasena']);
+
             if (array_key_exists('permisos', $data)) {
                 $setFields['permisos'] = array_values(array_map('intval', $data['permisos']));
                 unset($data['permisos']);
