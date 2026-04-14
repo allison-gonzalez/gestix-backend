@@ -25,6 +25,7 @@ class Usuario extends Model implements AuthenticatableContract
         'departamento_id',
         'permisos',
         'must_change_password',
+        'categorias_asignables',
     ];
 
     protected $hidden = [

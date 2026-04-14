@@ -150,6 +150,17 @@ class TicketController extends Controller
 
             $validated['departamento_id']  = (int) $validated['departamento_id'];
             $validated['usuario_autor_id'] = $autorId;
+            $validated['estado']           = 'abierto';
+
+            // Autoasignación: buscar gestor con menor carga en este departamento y categoría
+            $autoAsignadoId = $this->autoAsignar(
+                (int) $validated['departamento_id'],
+                (int) $validated['categoria_id'],
+                $autorId
+            );
+            if ($autoAsignadoId) {
+                $validated['asignado_a_id'] = $autoAsignadoId;
+            }
 
             // El archivo no debe ir al documento del ticket
             unset($validated['archivo']);
@@ -183,7 +194,8 @@ class TicketController extends Controller
                 $nextId,
                 (int) $validated['usuario_autor_id'],
                 $validated['titulo'],
-                (int) $validated['departamento_id']
+                (int) $validated['departamento_id'],
+                $autoAsignadoId
             );
 
             return response()->json([
@@ -434,28 +446,92 @@ class TicketController extends Controller
     }
 
     /**
-     * Notifica a usuarios con permiso asignar_ticket (id=4)
-     * que pertenezcan al mismo departamento del ticket, excluyendo al autor.
+     * Autoasignación por menor carga:
+     * Busca gestores del departamento con permiso 4 y que tengan la categoría en su lista.
+     * Si ninguno tiene la categoría configurada, toma cualquier gestor del departamento.
+     * Retorna el id numérico del gestor elegido, o null si no hay candidatos.
      */
-    private function notificarAsignadores(int $ticketId, int $autorId, string $titulo, int $departamentoId): void
+    private function autoAsignar(int $departamentoId, int $categoriaId, int $autorId): ?int
     {
         try {
-            // Buscar por el campo 'id' numérico separado (usuarios legacy) y por '_id' Int32 (usuarios nuevos)
-            // Laravel-mongodb traduce where('permisos', 4) → array contains check
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+
+            // Candidatos: usuarios activos del departamento (cualquiera puede atender)
+            $cursor = $mongoDB->usuarios->find([
+                'estatus'        => ['$in' => [1, true]],
+                'departamento_id'=> $departamentoId,
+            ]);
+
+            $candidatos = iterator_to_array($cursor);
+
+            \Log::info('autoAsignar candidatos: ' . count($candidatos) . ' dept=' . $departamentoId . ' cat=' . $categoriaId . ' autor=' . $autorId);
+
+            if (empty($candidatos)) return null;
+
+            // Filtrar por categorías atendibles
+            $conCategoria = array_filter($candidatos, function ($u) use ($categoriaId) {
+                $cats = isset($u['categorias_asignables']) ? (array) $u['categorias_asignables'] : [];
+                if (empty($cats)) return false;
+                return in_array($categoriaId, array_map('intval', $cats));
+            });
+
+            $pool = !empty($conCategoria) ? $conCategoria : $candidatos;
+
+            // Helper: obtener id numérico del usuario
+            $resolveId = function ($doc): ?int {
+                if (isset($doc['id']) && is_numeric($doc['id'])) {
+                    return (int) $doc['id'];
+                }
+                return null;
+            };
+
+            // Elegir gestor con menor carga
+            $elegido    = null;
+            $menorCarga = PHP_INT_MAX;
+
+            foreach ($pool as $candidato) {
+                $cid = $resolveId($candidato);
+                if ($cid === null || $cid === $autorId) continue;
+
+                $carga = $mongoDB->tickets->countDocuments([
+                    'asignado_a_id' => $cid,
+                    'estado'        => ['$in' => ['abierto', 'en_progreso']],
+                ]);
+
+                if ($carga < $menorCarga) {
+                    $menorCarga = $carga;
+                    $elegido    = $cid;
+                }
+            }
+
+            \Log::info('autoAsignar elegido: ' . ($elegido ?? 'null'));
+
+            return $elegido;
+        } catch (\Exception $e) {
+            \Log::warning('autoAsignar error: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Notifica a usuarios con permiso asignar_ticket (id=4)
+     * que pertenezcan al mismo departamento del ticket, excluyendo al autor.
+     * Si el ticket fue autoasignado, notifica al asignado con tipo ticket_asignado.
+     */
+    private function notificarAsignadores(int $ticketId, int $autorId, string $titulo, int $departamentoId, ?int $autoAsignadoId = null): void
+    {
+        try {
             $gestores = Usuario::where('estatus', 1)
                 ->where('permisos', 4)
                 ->where('departamento_id', $departamentoId)
                 ->get();
 
             foreach ($gestores as $gestor) {
-                // Obtener id numérico real: puede estar en 'id' como campo separado (legacy)
-                // o directamente en el primaryKey mapeado
-                $rawId = $gestor->getAttributes()['id'] ?? null;
+                $rawId    = $gestor->getAttributes()['id'] ?? null;
                 $gestorId = (is_numeric($rawId) && !($rawId instanceof \MongoDB\BSON\ObjectId))
                     ? (int) $rawId
                     : null;
 
-                // Fallback: buscar campo 'id' numérico via nativo para usuarios legacy
                 if ($gestorId === null) {
                     try {
                         $mongoDB = DB::connection('mongodb')->getMongoDB();
@@ -473,15 +549,28 @@ class TicketController extends Controller
 
                 if ($gestorId === null || $gestorId === $autorId) continue;
 
-                $this->crearYBroadcast([
-                    'tipo'        => 'ticket_creado',
-                    'titulo'      => 'Nuevo ticket',
-                    'mensaje'     => "Se creó el ticket #{$ticketId}: {$titulo}",
-                    'receptor_id' => $gestorId,
-                    'emisor_id'   => $autorId,
-                    'ticket_id'   => $ticketId,
-                    'leida'       => false,
-                ]);
+                // Si fue autoasignado a este gestor, notificación diferente
+                if ($gestorId === $autoAsignadoId) {
+                    $this->crearYBroadcast([
+                        'tipo'        => 'ticket_asignado',
+                        'titulo'      => 'Ticket asignado automáticamente',
+                        'mensaje'     => "Se te asignó el ticket #{$ticketId}: {$titulo}",
+                        'receptor_id' => $gestorId,
+                        'emisor_id'   => $autorId,
+                        'ticket_id'   => $ticketId,
+                        'leida'       => false,
+                    ]);
+                } else {
+                    $this->crearYBroadcast([
+                        'tipo'        => 'ticket_creado',
+                        'titulo'      => 'Nuevo ticket',
+                        'mensaje'     => "Se creó el ticket #{$ticketId}: {$titulo}",
+                        'receptor_id' => $gestorId,
+                        'emisor_id'   => $autorId,
+                        'ticket_id'   => $ticketId,
+                        'leida'       => false,
+                    ]);
+                }
             }
         } catch (\Exception $e) {
             \Log::warning('Error al notificar asignadores: ' . $e->getMessage());

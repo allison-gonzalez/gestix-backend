@@ -13,12 +13,14 @@ class Permiso extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
         'nombre',
         'descripcion',
         'estatus',
     ];
 
     protected $casts = [
+        'id'      => 'integer',
         'estatus' => 'integer',
     ];
 

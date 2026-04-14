@@ -13,14 +13,16 @@ class Categoria extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
         'nombre',
         'estatus',
         'departamento_id',
     ];
 
     protected $casts = [
-        'estatus' => 'integer',
-        'departamento_id' => 'integer',
+        'id'               => 'integer',
+        'estatus'          => 'integer',
+        'departamento_id'  => 'integer',
     ];
 
     /**

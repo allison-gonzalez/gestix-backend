@@ -13,12 +13,16 @@ class Departamento extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
         'nombre',
         'estatus',
+        'encargado_id',
     ];
 
     protected $casts = [
-        'estatus' => 'integer',
+        'id'           => 'integer',
+        'estatus'      => 'integer',
+        'encargado_id' => 'integer',
     ];
 
     /**

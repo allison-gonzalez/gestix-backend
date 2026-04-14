@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Categoria;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CategoriaController extends Controller
 {
@@ -60,7 +61,24 @@ class CategoriaController extends Controller
                 'estatus' => 'required|in:0,1',
             ]);
 
-            $categoria = Categoria::create($validated);
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->categorias->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1]]
+            );
+            $nextId = $lastDoc ? ((int) $lastDoc['id'] + 1) : 1;
+
+            $now = new \MongoDB\BSON\UTCDateTime();
+            $mongoDB->categorias->insertOne([
+                'id'              => (int) $nextId,
+                'nombre'          => $validated['nombre'],
+                'departamento_id' => (int) $validated['departamento_id'],
+                'estatus'         => (int) $validated['estatus'],
+                'created_at'      => $now,
+                'updated_at'      => $now,
+            ]);
+
+            $categoria = Categoria::where('id', $nextId)->first();
 
             return response()->json([
                 'data' => $categoria,
