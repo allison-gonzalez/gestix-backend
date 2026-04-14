@@ -13,6 +13,7 @@ class Ticket extends Model
         'titulo',
         'descripcion',
         'prioridad',
+        'estado',
         'fecha_creacion',
         'fecha_asignacion',
         'fecha_resolucion',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Permiso;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PermisoController extends Controller
 {
@@ -60,7 +61,24 @@ class PermisoController extends Controller
                 'estatus' => 'required|in:0,1',
             ]);
 
-            $permiso = Permiso::create($validated);
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->permisos->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1]]
+            );
+            $nextId = $lastDoc ? ((int) $lastDoc['id'] + 1) : 1;
+
+            $now = new \MongoDB\BSON\UTCDateTime();
+            $mongoDB->permisos->insertOne([
+                'id'          => (int) $nextId,
+                'nombre'      => $validated['nombre'],
+                'descripcion' => $validated['descripcion'] ?? null,
+                'estatus'     => (int) $validated['estatus'],
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ]);
+
+            $permiso = Permiso::where('id', $nextId)->first();
 
             return response()->json([
                 'data' => $permiso,

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Departamento;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DepartamentoController extends Controller
 {
@@ -55,11 +56,29 @@ class DepartamentoController extends Controller
     {
         try {
             $validated = $request->validate([
-                'nombre' => 'required|string|max:255|unique:departamentos,nombre',
-                'estatus' => 'required|in:0,1',
+                'nombre'       => 'required|string|max:255|unique:departamentos,nombre',
+                'estatus'      => 'required|in:0,1',
+                'encargado_id' => 'nullable|integer',
             ]);
 
-            $departamento = Departamento::create($validated);
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $lastDoc = $mongoDB->departamentos->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1]]
+            );
+            $nextId = $lastDoc ? ((int) $lastDoc['id'] + 1) : 1;
+
+            $now = new \MongoDB\BSON\UTCDateTime();
+            $mongoDB->departamentos->insertOne([
+                'id'          => (int) $nextId,
+                'nombre'      => $validated['nombre'],
+                'estatus'     => (int) $validated['estatus'],
+                'encargado_id'=> isset($validated['encargado_id']) ? (int) $validated['encargado_id'] : null,
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ]);
+
+            $departamento = Departamento::where('id', $nextId)->first();
 
             return response()->json([
                 'data' => $departamento,
@@ -87,21 +106,36 @@ class DepartamentoController extends Controller
             }
 
             $validated = $request->validate([
-                'nombre' => 'string|max:255|unique:departamentos,nombre,' . $id,
-                'estatus' => 'in:0,1',
+                'nombre'       => 'string|max:255|unique:departamentos,nombre,' . $id,
+                'estatus'      => 'in:0,1',
+                'encargado_id' => 'nullable|integer',
             ]);
 
-            $departamento->fill($validated);
-            $saved = $departamento->save();
-            
-            if ($saved) {
-                // Hacer un query fresco a BD para confirmar persistencia
-                $fresh = Departamento::find($id);
-                $departamento = $fresh;
+            // Usar driver nativo para evitar problemas de dirty-tracking con enteros en laravel-mongodb
+            $mongoDB   = DB::connection('mongodb')->getMongoDB();
+            $setFields = [];
+
+            if (array_key_exists('nombre', $validated)) {
+                $setFields['nombre'] = $validated['nombre'];
+            }
+            if (array_key_exists('estatus', $validated)) {
+                $setFields['estatus'] = (int) $validated['estatus'];
+            }
+            if (array_key_exists('encargado_id', $validated)) {
+                $setFields['encargado_id'] = $validated['encargado_id'] !== null ? (int) $validated['encargado_id'] : null;
             }
 
+            if (!empty($setFields)) {
+                $mongoDB->departamentos->updateOne(
+                    ['_id' => new \MongoDB\BSON\ObjectId((string) $departamento->_id)],
+                    ['$set' => $setFields]
+                );
+            }
+
+            $fresh = Departamento::find($id);
+
             return response()->json([
-                'data' => $departamento,
+                'data' => $fresh,
                 'message' => 'Departamento actualizado exitosamente',
             ]);
         } catch (\Exception $e) {

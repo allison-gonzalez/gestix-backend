@@ -84,6 +84,7 @@ class UsuarioController extends Controller
             $data = $request->only([
                 'nombre', 'correo', 'telefono',
                 'contrasena', 'estatus', 'departamento_id', 'permisos',
+                'categorias_asignables',
             ]);
 
             if (isset($data['estatus'])) {
@@ -110,6 +111,10 @@ class UsuarioController extends Controller
             if (array_key_exists('departamento_id', $data)) {
                 $setFields['departamento_id'] = $data['departamento_id'] !== null ? (int) $data['departamento_id'] : null;
                 unset($data['departamento_id']);
+            }
+            if (array_key_exists('categorias_asignables', $data)) {
+                $setFields['categorias_asignables'] = array_values(array_map('intval', $data['categorias_asignables'] ?? []));
+                unset($data['categorias_asignables']);
             }
 
             if (!empty($setFields)) {
@@ -178,14 +183,15 @@ class UsuarioController extends Controller
         $numericId = $forceId ?? (is_numeric($rawId) ? (int) $rawId : null);
 
         return [
-            '_id'             => (string) ($u->_id ?? ''),
-            'id'              => $numericId,
-            'nombre'          => $attrs['nombre']          ?? null,
-            'correo'          => $attrs['correo']          ?? null,
-            'telefono'        => $attrs['telefono']        ?? null,
-            'estatus'         => (int)   ($attrs['estatus']  ?? 0),
-            'departamento_id' => $attrs['departamento_id'] ?? null,
-            'permisos'        => $attrs['permisos']        ?? [],
+            '_id'                   => (string) ($u->_id ?? ''),
+            'id'                    => $numericId,
+            'nombre'                => $attrs['nombre']               ?? null,
+            'correo'                => $attrs['correo']               ?? null,
+            'telefono'              => $attrs['telefono']             ?? null,
+            'estatus'               => (int)   ($attrs['estatus']     ?? 0),
+            'departamento_id'       => $attrs['departamento_id']      ?? null,
+            'permisos'              => $attrs['permisos']             ?? [],
+            'categorias_asignables' => $attrs['categorias_asignables'] ?? [],
         ];
     }
 }
