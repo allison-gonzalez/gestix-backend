@@ -40,9 +40,9 @@ class UsuarioController extends Controller
                 'nombre'          => 'required|string|max:255',
                 'correo'          => 'required|string',
                 'telefono'        => 'nullable|string|max:20',
-                'contrasena'      => 'required|string|min:4',
+                'contrasena'      => ['required', 'string', 'min:8', 'regex:/[A-Z]/', 'regex:/[a-z]/', 'regex:/[0-9]/', 'regex:/[^A-Za-z0-9]/'],
                 'estatus'         => 'required',
-                'departamento_id' => 'nullable',
+                'departamento_id' => 'nullable|integer',
                 'permisos'        => 'nullable|array',
             ]);
 
@@ -53,19 +53,16 @@ class UsuarioController extends Controller
 
             // Calcular siguiente id usando driver nativo para evitar que max() devuelva un ObjectId
             $mongoDB = DB::connection('mongodb')->getMongoDB();
-            $lastDoc = $mongoDB->usuarios->find(
+            $lastDoc = $mongoDB->usuarios->findOne(
                 ['id' => ['$type' => 'int']],
-                ['sort' => ['id' => -1], 'limit' => 1]
-            )->toArray();
-            $nextId  = !empty($lastDoc) ? ((int) $lastDoc[0]['id'] + 1) : 1;
+                ['sort' => ['id' => -1]]
+            );
+            $nextId  = $lastDoc ? ((int) $lastDoc['id'] + 1) : 1;
+
+            // Asignar id numérico antes de crear
+            $validated['id'] = $nextId;
 
             $usuario = Usuario::create($validated);
-
-            // Asignar id numérico via driver nativo para evitar mapeo id→_id de laravel-mongodb
-            $mongoDB->usuarios->updateOne(
-                ['_id' => new \MongoDB\BSON\ObjectId((string) $usuario->_id)],
-                ['$set' => ['id' => $nextId]]
-            );
 
             return response()->json([
                 'data'    => $this->formatUsuario($usuario, $nextId),
@@ -97,6 +94,29 @@ class UsuarioController extends Controller
                 $data['contrasena'] = VigenereHelper::encrypt($data['contrasena']);
             } else {
                 unset($data['contrasena']);
+            }
+
+            // Update integer/array fields via native driver to avoid BSON dirty-tracking issues
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+            $setFields = [];
+            if (array_key_exists('permisos', $data)) {
+                $setFields['permisos'] = array_values(array_map('intval', $data['permisos']));
+                unset($data['permisos']);
+            }
+            if (array_key_exists('estatus', $data)) {
+                $setFields['estatus'] = (int) $data['estatus'];
+                unset($data['estatus']);
+            }
+            if (array_key_exists('departamento_id', $data)) {
+                $setFields['departamento_id'] = $data['departamento_id'] !== null ? (int) $data['departamento_id'] : null;
+                unset($data['departamento_id']);
+            }
+
+            if (!empty($setFields)) {
+                $mongoDB->usuarios->updateOne(
+                    ['_id' => new \MongoDB\BSON\ObjectId((string) $usuario->_id)],
+                    ['$set' => $setFields]
+                );
             }
 
             $usuario->fill($data);

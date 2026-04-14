@@ -86,18 +86,22 @@ class AuthController extends Controller
 
             $token = $this->generateToken($user);
 
+            // Extraer id de forma segura (puede ser int o ObjectId)
+            $userId = $user->getAttributes()['id'] ?? $user->_id;
+            $userId = is_numeric($userId) ? (int) $userId : (string) $userId;
+
             return response()->json([
                 'success' => true,
                 'message' => 'Login exitoso',
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id' => (int) ($user->getAttributes()['id'] ?? 0),
+                    'id' => $userId,
                     'nombre' => $user->nombre,
                     'correo' => $user->correo,
                     'telefono' => $user->telefono,
                     'estatus' => $user->estatus,
-                    'departamento_id' => (int) ($user->departamento_id ?? 0),
+                    'departamento_id' => is_numeric($user->departamento_id) ? (int) $user->departamento_id : null,
                     'permisos' => $user->permisos,
                 ],
             ], 200);
