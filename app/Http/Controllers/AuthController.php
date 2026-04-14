@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -86,9 +87,14 @@ class AuthController extends Controller
 
             $token = $this->generateToken($user);
 
-            // Extraer id de forma segura (puede ser int o ObjectId)
-            $userId = $user->getAttributes()['id'] ?? $user->_id;
-            $userId = is_numeric($userId) ? (int) $userId : (string) $userId;
+            // generateToken already auto-healed legacy users, so resolveNumericId is fast (single findOne)
+            $userId = $this->resolveNumericId($user);
+
+            \Log::info('Login response user:', [
+                'id' => $userId,
+                'must_change_password_raw' => $user->must_change_password,
+                'must_change_password_cast' => (bool) ($user->must_change_password ?? false),
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -103,6 +109,7 @@ class AuthController extends Controller
                     'estatus' => $user->estatus,
                     'departamento_id' => is_numeric($user->departamento_id) ? (int) $user->departamento_id : null,
                     'permisos' => $user->permisos,
+                    'must_change_password' => (bool) ($user->must_change_password ?? false),
                 ],
             ], 200);
         } catch (\Exception $e) {
@@ -190,6 +197,84 @@ class AuthController extends Controller
         }
     }
 
+    public function forgotPassword(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Correo electrónico inválido',
+                ], 422);
+            }
+
+            $user = Usuario::where('correo', $request->email)->first();
+
+            // Always return success to avoid email enumeration
+            if (!$user) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Si el correo está registrado, recibirás una contraseña temporal.',
+                ]);
+            }
+
+            if ($user->estatus !== 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tu cuenta está desactivada. Contacta al administrador.',
+                ], 403);
+            }
+
+            // Generate temporary password: Temporal@XXXX
+            $tempPassword = 'Temporal@' . rand(1000, 9999);
+            $encrypted = VigenereHelper::encrypt($tempPassword);
+
+            $user->contrasena = $encrypted;
+            $user->must_change_password = true;
+            $user->save();
+
+            \Log::info('Forgot password - User updated', [
+                'user_id' => $user->id,
+                'must_change_password' => $user->must_change_password,
+            ]);
+
+            // Send email with temp password
+            $userName = $user->nombre;
+            $toEmail  = $user->correo;
+
+            Mail::send([], [], function ($message) use ($toEmail, $userName, $tempPassword) {
+                $message->to($toEmail)
+                    ->subject('Gestix - Contraseña temporal')
+                    ->html(
+                        '<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:32px;border:1px solid #e0e0e0;border-radius:12px;">'
+                        . '<h2 style="color:#1B3A5C;">Recuperación de contraseña</h2>'
+                        . '<p>Hola <strong>' . htmlspecialchars($userName) . '</strong>,</p>'
+                        . '<p>Tu contraseña temporal para acceder a <strong>Gestix</strong> es:</p>'
+                        . '<div style="background:#f0f7ff;border:2px dashed #1B3A5C;border-radius:8px;padding:16px 24px;text-align:center;font-size:22px;font-weight:bold;color:#1B3A5C;letter-spacing:1px;margin:20px 0;">'
+                        . htmlspecialchars($tempPassword)
+                        . '</div>'
+                        . '<p style="color:#e67e22;font-size:13px;">Por seguridad, cambia esta contraseña desde tu perfil después de iniciar sesión.</p>'
+                        . '<hr style="border:none;border-top:1px solid #eee;margin:24px 0;">'
+                        . '<p style="color:#999;font-size:12px;">Si no solicitaste este correo, ignóralo.</p>'
+                        . '</div>'
+                    );
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Se ha enviado una contraseña temporal a tu correo electrónico.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en el servidor',
+            ], 500);
+        }
+    }
+
 
     public function me(Request $request)
     {
@@ -264,19 +349,83 @@ class AuthController extends Controller
         $issuedAt = time();
         $expire = $issuedAt + (60 * 60 * 24); // 24 horas
 
+        // Always resolve to a numeric integer — auto-heals legacy users that only have ObjectId
+        $userId = $this->resolveNumericId($user);
+
         $payload = [
             'iat' => $issuedAt,
             'exp' => $expire,
             'iss' => config('app.url'),
-            'sub' => $user->_id,
+            'sub' => (string) $user->_id,
             'data' => [
-                'id' => $user->_id,
+                'id' => $userId,
                 'nombre' => $user->nombre,
                 'correo' => $user->correo,
             ],
         ];
 
         return JWT::encode($payload, $this->secret_key, 'HS256');
+    }
+
+    /**
+     * Ensures the user has a numeric sequential id and returns it.
+     * Auto-heals legacy users that only have a MongoDB ObjectId as _id.
+     */
+    private function resolveNumericId(Usuario $user): ?int
+    {
+        $rawId = $user->getAttributes()['id'] ?? null;
+
+        // Already an integer — normal case
+        if (!($rawId instanceof \MongoDB\BSON\ObjectId) && is_numeric($rawId)) {
+            return (int) $rawId;
+        }
+
+        // Legacy user: find or assign a numeric id
+        try {
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+
+            $objectId = ($rawId instanceof \MongoDB\BSON\ObjectId)
+                ? $rawId
+                : new \MongoDB\BSON\ObjectId((string) $user->_id);
+
+            // Check if a numeric id was already saved on the document
+            $doc = $mongoDB->usuarios->findOne(
+                ['_id' => $objectId],
+                ['projection' => ['id' => 1]]
+            );
+            if ($doc && isset($doc['id']) && is_numeric($doc['id'])) {
+                return (int) $doc['id'];
+            }
+
+            // Auto-assign: max across _id (Int32) and id (Int32) fields
+            $max = 0;
+            $d1  = $mongoDB->usuarios->findOne(
+                ['_id' => ['$type' => 'int']],
+                ['sort' => ['_id' => -1], 'projection' => ['_id' => 1]]
+            );
+            $d2  = $mongoDB->usuarios->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1], 'projection' => ['id' => 1]]
+            );
+            if ($d1) $max = max($max, (int) $d1['_id']);
+            if ($d2) $max = max($max, (int) $d2['id']);
+
+            $newId = $max + 1;
+            $mongoDB->usuarios->updateOne(
+                ['_id' => $objectId],
+                ['$set' => ['id' => $newId]]
+            );
+
+            \Log::info('resolveNumericId: assigned new id to legacy user', [
+                'objectId' => (string) $objectId,
+                'newId'    => $newId,
+            ]);
+
+            return $newId;
+        } catch (\Exception $e) {
+            \Log::warning('resolveNumericId failed: ' . $e->getMessage());
+            return null;
+        }
     }
 
 

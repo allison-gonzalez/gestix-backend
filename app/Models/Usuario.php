@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\Model;
+use Illuminate\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 
-class Usuario extends Model
+class Usuario extends Model implements AuthenticatableContract
 {
+    use Authenticatable;
+
     protected $connection = 'mongodb';
     protected $collection = 'usuarios';
     protected $primaryKey = 'id';
@@ -20,6 +24,7 @@ class Usuario extends Model
         'estatus',
         'departamento_id',
         'permisos',
+        'must_change_password',
     ];
 
     protected $hidden = [
@@ -29,6 +34,7 @@ class Usuario extends Model
     protected $casts = [
         'estatus' => 'integer',
         'departamento_id' => 'integer',
+        'must_change_password' => 'boolean',
     ];
 
     

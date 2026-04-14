@@ -8,22 +8,28 @@ use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    
+    /**
+     * Seed the application's database.
+     */
     public function run(): void
     {
+        // Usuario de prueba estándar
         User::create([
-            'name' => 'Test User',
-            'email' => 'test@gestix.com',
-            'password' => Hash::make('password123'),
+            'nombre' => 'Test User',
+            'correo' => 'test@gestix.com',
+            'contrasena' => Hash::make('password123'),
+            'estatus' => 1,
         ]);
 
+        // Usuario Administrador
         User::create([
-            'name' => 'Admin User',
-            'email' => 'admin@gestix.com',
-            'password' => Hash::make('admin123'),
+            'nombre' => 'Admin User',
+            'correo' => 'admin@gestix.com',
+            'contrasena' => Hash::make('admin123'),
+            'estatus' => 1,
         ]);
 
-        echo "\nSeeding completado!\n";
-        echo "- Usuarios: " . User::count() . "\n";
+        echo "\n¡Seeding completado con éxito!\n";
+        echo "- Usuarios creados: " . User::count() . "\n";
     }
 }

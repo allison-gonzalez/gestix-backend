@@ -11,12 +11,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
+        // Cambiamos 'users' por 'usuarios' y las columnas a español
+        Schema::create('usuarios', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
+            $table->string('nombre');
+            $table->string('correo')->unique();
+            $table->string('telefono')->nullable(); // Agregado para el perfil
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+            $table->string('contrasena'); // En español
+            $table->integer('estatus')->default(1); // Agregado para el sistema
+            $table->integer('departamento_id')->nullable(); // Agregado
+            $table->text('permisos')->nullable(); // Agregado
             $table->rememberToken();
             $table->timestamps();
         });
@@ -42,7 +47,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        Schema::dropIfExists('usuarios'); // Corregido el nombre aquí también
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }

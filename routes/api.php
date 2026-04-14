@@ -11,7 +11,9 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Controllers\ProfileController; // Importado correctamente
 use App\Http\Controllers\ArchivoController;
+use App\Http\Controllers\NotificacionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,23 +35,30 @@ Route::get('/test', function () {
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 
     Route::middleware('jwt')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
+        Route::post('/user/update-password', [ProfileController::class, 'updatePassword']);
+        Route::put('/user/update-profile', [ProfileController::class, 'updateProfile']);
     });
 });
 
 // Rutas de Tickets
 Route::prefix('tickets')->group(function () {
-    Route::get('/', [TicketController::class, 'index']);
-    Route::get('/stats', [TicketController::class, 'stats']);
-    Route::post('/', [TicketController::class, 'store']);
-    Route::get('/{id}', [TicketController::class, 'show']);
-    Route::put('/{id}', [TicketController::class, 'update']);
-    Route::delete('/{id}', [TicketController::class, 'destroy']);
-    Route::post('/{id}/resolve', [TicketController::class, 'resolve']);
+    Route::get('/',       [TicketController::class, 'index']);
+    Route::get('/stats',  [TicketController::class, 'stats']);
+    Route::get('/{id}',   [TicketController::class, 'show']);
+
+    // Rutas que requieren usuario autenticado
+    Route::middleware('jwt')->group(function () {
+        Route::post('/',             [TicketController::class, 'store']);
+        Route::put('/{id}',          [TicketController::class, 'update']);
+        Route::delete('/{id}',       [TicketController::class, 'destroy']);
+        Route::post('/{id}/resolve', [TicketController::class, 'resolve']);
+    });
 });
 
 // Rutas de Comentarios
@@ -96,4 +105,12 @@ Route::prefix('usuarios')->group(function () {
     Route::put('/{id}',          [UsuarioController::class, 'update']);
     Route::delete('/{id}',       [UsuarioController::class, 'destroy']);
     Route::post('/{id}/verify-password', [UsuarioController::class, 'verifyPassword']);
+});
+
+// Rutas de Notificaciones (requieren JWT)
+Route::middleware('jwt')->prefix('notificaciones')->group(function () {
+    Route::get('/',              [NotificacionController::class, 'index']);
+    Route::get('/no-leidas',     [NotificacionController::class, 'unreadCount']);
+    Route::put('/leer-todas',    [NotificacionController::class, 'markAllRead']);
+    Route::put('/{id}/leer',     [NotificacionController::class, 'markRead']);
 });
