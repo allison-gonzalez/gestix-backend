@@ -32,7 +32,29 @@ class JwtMiddleware
         }
 
         $tokenUserId = $decoded->data->id;
-        $user = Usuario::where('id', $tokenUserId)->orWhere('_id', $tokenUserId)->first();
+
+        // Con $primaryKey='id', laravel-mongodb traduce where('id', x) → _id = x.
+        // Eso encuentra usuarios NUEVOS (donde _id es Int32).
+        // Para usuarios LEGACY (_id es ObjectId + campo id separado), hay que usar driver nativo.
+        $user = null;
+
+        // 1) Intento Eloquent — funciona para usuarios nuevos con _id Int32
+        if (is_numeric($tokenUserId)) {
+            $user = Usuario::where('id', (int) $tokenUserId)->first();
+        }
+
+        // 2) Fallback nativo — funciona para usuarios legacy con id como campo separado
+        if (!$user && is_numeric($tokenUserId)) {
+            try {
+                $mongoDB = DB::connection('mongodb')->getMongoDB();
+                $doc = $mongoDB->usuarios->findOne(['id' => (int) $tokenUserId]);
+                if ($doc) {
+                    $user = Usuario::where('_id', new \MongoDB\BSON\ObjectId((string) $doc['_id']))->first();
+                }
+            } catch (\Exception $e) {
+                \Log::warning('JwtMiddleware fallback lookup failed: ' . $e->getMessage());
+            }
+        }
 
         if (!$user) {
             return response()->json([

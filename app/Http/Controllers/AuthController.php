@@ -87,9 +87,8 @@ class AuthController extends Controller
 
             $token = $this->generateToken($user);
 
-            // Extraer id de forma segura (puede ser int o ObjectId)
-            $userId = $user->getAttributes()['id'] ?? $user->_id;
-            $userId = is_numeric($userId) ? (int) $userId : (string) $userId;
+            // generateToken already auto-healed legacy users, so resolveNumericId is fast (single findOne)
+            $userId = $this->resolveNumericId($user);
 
             \Log::info('Login response user:', [
                 'id' => $userId,
@@ -350,18 +349,14 @@ class AuthController extends Controller
         $issuedAt = time();
         $expire = $issuedAt + (60 * 60 * 24); // 24 horas
 
-        // With $primaryKey='id', getAttributes()['id'] equals MongoDB's _id.
-        // For properly created users _id is Int32; for legacy users it's an ObjectId.
-        $rawId = $user->getAttributes()['id'] ?? null;
-        $userId = (!($rawId instanceof \MongoDB\BSON\ObjectId) && is_numeric($rawId))
-            ? (int) $rawId
-            : (string) ($rawId ?? $user->_id);
+        // Always resolve to a numeric integer — auto-heals legacy users that only have ObjectId
+        $userId = $this->resolveNumericId($user);
 
         $payload = [
             'iat' => $issuedAt,
             'exp' => $expire,
             'iss' => config('app.url'),
-            'sub' => $user->_id,
+            'sub' => (string) $user->_id,
             'data' => [
                 'id' => $userId,
                 'nombre' => $user->nombre,
@@ -370,6 +365,67 @@ class AuthController extends Controller
         ];
 
         return JWT::encode($payload, $this->secret_key, 'HS256');
+    }
+
+    /**
+     * Ensures the user has a numeric sequential id and returns it.
+     * Auto-heals legacy users that only have a MongoDB ObjectId as _id.
+     */
+    private function resolveNumericId(Usuario $user): ?int
+    {
+        $rawId = $user->getAttributes()['id'] ?? null;
+
+        // Already an integer — normal case
+        if (!($rawId instanceof \MongoDB\BSON\ObjectId) && is_numeric($rawId)) {
+            return (int) $rawId;
+        }
+
+        // Legacy user: find or assign a numeric id
+        try {
+            $mongoDB = DB::connection('mongodb')->getMongoDB();
+
+            $objectId = ($rawId instanceof \MongoDB\BSON\ObjectId)
+                ? $rawId
+                : new \MongoDB\BSON\ObjectId((string) $user->_id);
+
+            // Check if a numeric id was already saved on the document
+            $doc = $mongoDB->usuarios->findOne(
+                ['_id' => $objectId],
+                ['projection' => ['id' => 1]]
+            );
+            if ($doc && isset($doc['id']) && is_numeric($doc['id'])) {
+                return (int) $doc['id'];
+            }
+
+            // Auto-assign: max across _id (Int32) and id (Int32) fields
+            $max = 0;
+            $d1  = $mongoDB->usuarios->findOne(
+                ['_id' => ['$type' => 'int']],
+                ['sort' => ['_id' => -1], 'projection' => ['_id' => 1]]
+            );
+            $d2  = $mongoDB->usuarios->findOne(
+                ['id' => ['$type' => 'int']],
+                ['sort' => ['id' => -1], 'projection' => ['id' => 1]]
+            );
+            if ($d1) $max = max($max, (int) $d1['_id']);
+            if ($d2) $max = max($max, (int) $d2['id']);
+
+            $newId = $max + 1;
+            $mongoDB->usuarios->updateOne(
+                ['_id' => $objectId],
+                ['$set' => ['id' => $newId]]
+            );
+
+            \Log::info('resolveNumericId: assigned new id to legacy user', [
+                'objectId' => (string) $objectId,
+                'newId'    => $newId,
+            ]);
+
+            return $newId;
+        } catch (\Exception $e) {
+            \Log::warning('resolveNumericId failed: ' . $e->getMessage());
+            return null;
+        }
     }
 
 
