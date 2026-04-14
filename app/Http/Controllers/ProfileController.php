@@ -70,6 +70,7 @@ class ProfileController extends Controller
         // 2. Encriptar la nueva contraseña y guardar
         try {
             $user->contrasena = VigenereHelper::encrypt($request->new);
+            $user->must_change_password = false;
             $user->save();
             return response()->json(['message' => '¡Contraseña actualizada con éxito!']);
         } catch (\Exception $e) {

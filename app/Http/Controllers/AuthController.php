@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -90,6 +91,12 @@ class AuthController extends Controller
             $userId = $user->getAttributes()['id'] ?? $user->_id;
             $userId = is_numeric($userId) ? (int) $userId : (string) $userId;
 
+            \Log::info('Login response user:', [
+                'id' => $userId,
+                'must_change_password_raw' => $user->must_change_password,
+                'must_change_password_cast' => (bool) ($user->must_change_password ?? false),
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Login exitoso',
@@ -103,6 +110,7 @@ class AuthController extends Controller
                     'estatus' => $user->estatus,
                     'departamento_id' => is_numeric($user->departamento_id) ? (int) $user->departamento_id : null,
                     'permisos' => $user->permisos,
+                    'must_change_password' => (bool) ($user->must_change_password ?? false),
                 ],
             ], 200);
         } catch (\Exception $e) {
@@ -186,6 +194,84 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Error en el servidor',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Correo electrónico inválido',
+                ], 422);
+            }
+
+            $user = Usuario::where('correo', $request->email)->first();
+
+            // Always return success to avoid email enumeration
+            if (!$user) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Si el correo está registrado, recibirás una contraseña temporal.',
+                ]);
+            }
+
+            if ($user->estatus !== 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tu cuenta está desactivada. Contacta al administrador.',
+                ], 403);
+            }
+
+            // Generate temporary password: Temporal@XXXX
+            $tempPassword = 'Temporal@' . rand(1000, 9999);
+            $encrypted = VigenereHelper::encrypt($tempPassword);
+
+            $user->contrasena = $encrypted;
+            $user->must_change_password = true;
+            $user->save();
+
+            \Log::info('Forgot password - User updated', [
+                'user_id' => $user->id,
+                'must_change_password' => $user->must_change_password,
+            ]);
+
+            // Send email with temp password
+            $userName = $user->nombre;
+            $toEmail  = $user->correo;
+
+            Mail::send([], [], function ($message) use ($toEmail, $userName, $tempPassword) {
+                $message->to($toEmail)
+                    ->subject('Gestix - Contraseña temporal')
+                    ->html(
+                        '<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:32px;border:1px solid #e0e0e0;border-radius:12px;">'
+                        . '<h2 style="color:#1B3A5C;">Recuperación de contraseña</h2>'
+                        . '<p>Hola <strong>' . htmlspecialchars($userName) . '</strong>,</p>'
+                        . '<p>Tu contraseña temporal para acceder a <strong>Gestix</strong> es:</p>'
+                        . '<div style="background:#f0f7ff;border:2px dashed #1B3A5C;border-radius:8px;padding:16px 24px;text-align:center;font-size:22px;font-weight:bold;color:#1B3A5C;letter-spacing:1px;margin:20px 0;">'
+                        . htmlspecialchars($tempPassword)
+                        . '</div>'
+                        . '<p style="color:#e67e22;font-size:13px;">Por seguridad, cambia esta contraseña desde tu perfil después de iniciar sesión.</p>'
+                        . '<hr style="border:none;border-top:1px solid #eee;margin:24px 0;">'
+                        . '<p style="color:#999;font-size:12px;">Si no solicitaste este correo, ignóralo.</p>'
+                        . '</div>'
+                    );
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Se ha enviado una contraseña temporal a tu correo electrónico.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en el servidor',
             ], 500);
         }
     }

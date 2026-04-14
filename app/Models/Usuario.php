@@ -24,6 +24,7 @@ class Usuario extends Model implements AuthenticatableContract
         'estatus',
         'departamento_id',
         'permisos',
+        'must_change_password',
     ];
 
     protected $hidden = [
@@ -33,6 +34,7 @@ class Usuario extends Model implements AuthenticatableContract
     protected $casts = [
         'estatus' => 'integer',
         'departamento_id' => 'integer',
+        'must_change_password' => 'boolean',
     ];
 
     
