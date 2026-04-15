@@ -84,12 +84,13 @@ class VigenereHelper
     public static function decrypt(string $ciphertext): string
     {
         try {
+            $rawKey = self::getKey();
+            $key = self::normalizeKey($rawKey);
             $ciphertext = base64_decode($ciphertext, true);
             if ($ciphertext === false) {
                 return '';
             }
 
-            $key = self::normalizeKey(self::getKey());
             $bytes = array_values(unpack('C*', $ciphertext));
             $plaintext = '';
             $keyIndex = 0;
