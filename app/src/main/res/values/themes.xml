@@ -2,6 +2,10 @@
     <style name="Theme.Nefis" parent="@style/Theme.Leanback" >
         <item name="android:windowAllowEnterTransitionOverlap">true</item>
         <item name="android:windowAllowReturnTransitionOverlap">true</item>
-        <item name="android:colorPrimary">#25A5C8</item>
+        <item name="android:colorPrimary">#0057B8</item> <!-- Azul Blockbuster -->
+        <item name="android:windowBackground">#FFD200</item> <!-- Amarillo Blockbuster -->
+        <item name="android:textColor">#000000</item> <!-- Texto general en negro -->
+        <item name="android:textColorPrimary">#000000</item> <!-- Texto primario en negro -->
+        <item name="android:textColorSecondary">#000000</item> <!-- Texto secundario en negro -->
     </style>
 </resources>
