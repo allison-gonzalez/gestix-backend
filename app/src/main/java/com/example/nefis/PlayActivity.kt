@@ -2,11 +2,7 @@ package com.example.nefis
 
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
-import android.net.Uri
-import android.util.Log
-import android.widget.MediaController
 import android.widget.TextView
-import android.widget.VideoView
 
 class PlayActivity : FragmentActivity() {
 
@@ -18,26 +14,22 @@ class PlayActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_play)
 
-        val videoView = findViewById<VideoView>(R.id.videoView)
         val titleView = findViewById<TextView>(R.id.txtPlayTitle)
         val descriptionView = findViewById<TextView>(R.id.txtPlayDescription)
 
-        val video: Video? =intent.getParcelableExtra<Video>(PlayActivity.MOVIE_EXTRA)
+        val ticket: Ticket? = intent.getParcelableExtra<Ticket>(PlayActivity.MOVIE_EXTRA)
 
-        if (video != null) {
-            val path = "android.resource://" + packageName + "/" + video.video
-            val uri = Uri.parse(path)
-            
-            titleView.text = video.title
-            descriptionView.text = video.description
-
-            val mediaController = MediaController(this)
-            mediaController.setAnchorView(videoView)
-            videoView.setMediaController(mediaController)
-
-            videoView.setVideoURI(uri)
-            videoView.requestFocus()
-            videoView.start()
+        if (ticket != null) {
+            titleView.text = ticket.titulo
+            descriptionView.text = """
+                Prioridad: ${ticket.prioridad}
+                Estado: ${ticket.estado ?: "Pendiente"}
+                
+                ${ticket.descripcion}
+                
+                Creado el: ${ticket.fechaCreacion ?: "N/A"}
+                Ticket ID: ${ticket.id}
+            """.trimIndent()
         }
     }
 }

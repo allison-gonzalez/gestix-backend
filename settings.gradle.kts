@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Nefis"
+rootProject.name = "TVtickets"
 include(":app")
  

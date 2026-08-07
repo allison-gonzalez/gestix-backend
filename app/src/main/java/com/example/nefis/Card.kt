@@ -15,22 +15,21 @@ class Card: Presenter(){
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
-        val video = item as Video
         val view = viewHolder.view
-        
         val image = view.findViewById<ImageView>(R.id.card_image)
         val title = view.findViewById<TextView>(R.id.card_title)
         val description = view.findViewById<TextView>(R.id.card_description)
 
-        title.text = video.title
-        // Limpiamos la descripción para que solo muestre el texto descriptivo
-        description.text = video.description
-
-        val uri = "android.resource://${view.context.packageName}/${video.video}"
-        Glide.with(view.context)
-            .load(uri)
-            .centerCrop()
-            .into(image)
+        if (item is Ticket) {
+            title.text = item.titulo
+            description.text = item.descripcion
+            image.setImageResource(android.R.drawable.ic_menu_info_details)
+        } else if (item is SettingsItem) {
+            title.text = item.title
+            description.text = item.description
+            image.setImageResource(item.icon)
+            image.setColorFilter(android.graphics.Color.WHITE)
+        }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {

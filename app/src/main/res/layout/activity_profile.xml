@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="50dp">
+
+    <TextView
+        android:id="@+id/tvProfileTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Perfil de Usuario"
+        android:textColor="#FFFFFF"
+        android:textSize="34sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:layout_width="500dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="40dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvProfileTitle">
+
+        <TextView
+            android:id="@+id/tvUserName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Nombre: -"
+            android:textColor="#EEEEEE"
+            android:textSize="24sp"
+            android:layout_marginBottom="10dp"/>
+
+        <TextView
+            android:id="@+id/tvUserEmail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Correo: -"
+            android:textColor="#EEEEEE"
+            android:textSize="24sp"
+            android:layout_marginBottom="10dp"/>
+
+        <TextView
+            android:id="@+id/tvUserDept"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Departamento: -"
+            android:textColor="#EEEEEE"
+            android:textSize="24sp"
+            android:layout_marginBottom="30dp"/>
+
+        <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="250dp"
+            android:layout_height="60dp"
+            android:text="Cerrar Sesión"
+            android:backgroundTint="#D32F2F"
+            android:textColor="#FFFFFF"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

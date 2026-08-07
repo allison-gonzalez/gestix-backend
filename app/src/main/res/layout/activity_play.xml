@@ -4,64 +4,31 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
-    android:background="#FFD200"
-    android:weightSum="10"
+    android:orientation="vertical"
+    android:background="#121212"
+    android:padding="32dp"
     tools:context=".PlayActivity">
 
-    <!-- Lado izquierdo: El Video -->
-    <FrameLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="7"
-        android:background="#000000">
+    <TextView
+        android:id="@+id/txtPlayTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="24dp" />
 
-        <VideoView
-            android:id="@+id/videoView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center" />
-    </FrameLayout>
+    <TextView
+        android:id="@+id/txtPlayDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#EEEEEE"
+        android:textSize="20sp"
+        android:lineSpacingExtra="8dp" />
 
-    <!-- Lado derecho: Información del Video -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="3"
-        android:orientation="vertical"
-        android:padding="24dp"
-        android:background="#FFD200"
-        android:gravity="top">
-
-        <TextView
-            android:id="@+id/txtPlayTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#000000"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp" />
-
-        <TextView
-            android:id="@+id/txtPlayDescription"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#000000"
-            android:textSize="18sp"
-            android:lineSpacingExtra="4dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:src="@mipmap/blockbuster"
-            android:scaleType="fitCenter"
-            android:alpha="0.3"
-            android:contentDescription="Blockbuster Logo" />
-    </LinearLayout>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
 </LinearLayout>
