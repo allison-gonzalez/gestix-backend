@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <color name="lb_browse_header_color" tools:override="true">#EEEEEE</color>
+    <color name="primary_navy">#1A3258</color>
+    <color name="accent_yellow">#FFC107</color>
+    <color name="background_light">#F5F7FB</color>
+    <color name="status_open">#FF7F7F</color>
+    <color name="text_dark">#333333</color>
+    <color name="white">#FFFFFF</color>
+    <color name="lb_browse_header_color" tools:override="true">#333333</color>
 </resources>

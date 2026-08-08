@@ -6,7 +6,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.leanback.widget.Presenter
-import com.bumptech.glide.Glide
 
 class Card: Presenter(){
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
@@ -16,24 +15,26 @@ class Card: Presenter(){
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
         val view = viewHolder.view
-        val image = view.findViewById<ImageView>(R.id.card_image)
         val title = view.findViewById<TextView>(R.id.card_title)
-        val description = view.findViewById<TextView>(R.id.card_description)
+        val priority = view.findViewById<TextView>(R.id.card_priority)
+        val statusText = view.findViewById<TextView>(R.id.card_status_text)
+        val statusBar = view.findViewById<View>(R.id.card_status_bar)
 
         if (item is Ticket) {
             title.text = item.titulo
-            description.text = item.descripcion
-            image.setImageResource(android.R.drawable.ic_menu_info_details)
-        } else if (item is SettingsItem) {
-            title.text = item.title
-            description.text = item.description
-            image.setImageResource(item.icon)
-            image.setColorFilter(android.graphics.Color.WHITE)
+            priority.text = "Prioridad: ${item.prioridad}"
+            statusText.text = (item.estado ?: "ABIERTO").uppercase()
+            
+            // Cambiar color de la barra según prioridad
+            val color = when(item.prioridad.lowercase()) {
+                "alta", "critica" -> 0xFFFF7F7F.toInt()
+                "media" -> 0xFFFFC107.toInt()
+                else -> 0xFF8BC34A.toInt()
+            }
+            statusBar.setBackgroundColor(color)
         }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
-        val image = viewHolder.view.findViewById<ImageView>(R.id.card_image)
-        Glide.with(viewHolder.view.context).clear(image)
     }
 }

@@ -24,7 +24,10 @@ class LoginActivity : FragmentActivity() {
 
         btnLogin.setOnClickListener {
             val email = etEmail.text.toString().trim()
-            val password = etPassword.text.toString().trim()
+            val password = etPassword.text.toString() // SIN TRIM para respetar el cifrado
+
+            // LOG DE DIAGNÓSTICO: Revisa esto en el Logcat
+            android.util.Log.d("GESTIX_DEBUG", "Enviando Login -> Email: $email | Pass: '$password' | Largo: ${password.length}")
 
             if (email.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "Por favor llena todos los campos", Toast.LENGTH_SHORT).show()
@@ -38,29 +41,24 @@ class LoginActivity : FragmentActivity() {
                     if (response.isSuccessful && response.body()?.success == true) {
                         val body = response.body()
                         val user = body?.user
-                        val userId = user?.id?.toString() ?: ""
-                        val token = body?.accessToken ?: ""
                         
-                        // Guardar información del usuario logueado
                         val prefs = getSharedPreferences("gestix_prefs", Context.MODE_PRIVATE)
                         prefs.edit().apply {
-                            putString("user_id", userId)
+                            putString("user_id", user?.id?.toString() ?: "")
                             putString("user_name", user?.nombre ?: "")
                             putString("user_email", user?.correo ?: "")
-                            putString("user_dept", user?.departamentoId ?: "N/A")
-                            putString("auth_token", token)
+                            putString("user_dept", user?.departamentoId?.toString() ?: "")
+                            putString("auth_token", body?.accessToken ?: "")
                             apply()
                         }
 
-                        val intent = Intent(this@LoginActivity, MainActivity2::class.java)
-                        startActivity(intent)
+                        startActivity(Intent(this@LoginActivity, MainActivity2::class.java))
                         finish()
                     } else {
-                        // AQUÍ ESTÁ EL CAMBIO: Leemos el error exacto que manda Laravel
                         val errorBody = response.errorBody()?.string()
-                        val errorResponse = Gson().fromJson(errorBody, LoginResponse::class.java)
-                        val msg = errorResponse?.message ?: "Datos incorrectos"
-                        
+                        val msg = try {
+                            Gson().fromJson(errorBody, LoginResponse::class.java)?.message 
+                        } catch (e: Exception) { null } ?: "Credenciales incorrectas"
                         Toast.makeText(this@LoginActivity, "Laravel dice: $msg", Toast.LENGTH_LONG).show()
                     }
                 }

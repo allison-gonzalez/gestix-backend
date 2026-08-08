@@ -11,14 +11,10 @@ data class Ticket(
     val descripcion: String,
     val prioridad: String,
     @SerializedName("fecha_creacion") val fechaCreacion: String?,
-    @SerializedName("fecha_asignacion") val fechaAsignacion: String?,
-    @SerializedName("fecha_resolucion") val fechaResolucion: String?,
     @SerializedName("usuario_autor_id") val usuarioAutorId: String?,
     @SerializedName("categoria_id") val categoriaId: String?,
-    @SerializedName("categoria_nombre") val categoriaNombre: String,
+    @SerializedName("categoria_nombre") val categoriaNombre: String?,
     @SerializedName("departamento_id") val departamentoId: String?,
-    @SerializedName("autor_departamento_id") val autorDepartamentoId: String?, // Añadido este campo
-    val comentarios: List<Int>?,
-    @SerializedName("archivo_path") val archivoPath: String?,
+    @SerializedName("autor_departamento_id") val autorDepartamentoId: String?,
     val estado: String?
 ) : Parcelable
