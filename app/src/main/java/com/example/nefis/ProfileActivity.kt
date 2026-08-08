@@ -27,7 +27,7 @@ class ProfileActivity : FragmentActivity() {
         }
         
         // Efecto de foco para los botones
-        val buttons = listOf(R.id.btnChangePassword, R.id.btnLogout, R.id.btnHelp)
+        val buttons = listOf(R.id.btnLogout, R.id.btnHelp)
         buttons.forEach { id ->
             findViewById<Button>(id).setOnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) {

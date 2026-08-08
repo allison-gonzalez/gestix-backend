@@ -151,22 +151,6 @@
             app:layout_constraintStart_toStartOf="parent" />
 
         <Button
-            android:id="@+id/btnChangePassword"
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginStart="24dp"
-            android:layout_marginEnd="24dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/profile_option_bg"
-            android:text="Cambiar contraseña"
-            android:textAllCaps="false"
-            android:textColor="@color/text_dark"
-            android:gravity="start|center_vertical"
-            android:paddingStart="24dp"
-            android:focusable="true"
-            app:layout_constraintTop_toBottomOf="@id/tvConfigLabel" />
-
-        <Button
             android:id="@+id/btnLogout"
             android:layout_width="match_parent"
             android:layout_height="64dp"
@@ -180,7 +164,7 @@
             android:gravity="start|center_vertical"
             android:paddingStart="24dp"
             android:focusable="true"
-            app:layout_constraintTop_toBottomOf="@id/btnChangePassword" />
+            app:layout_constraintTop_toBottomOf="@id/tvConfigLabel" />
 
         <TextView
             android:id="@+id/tvSupportLabel"
