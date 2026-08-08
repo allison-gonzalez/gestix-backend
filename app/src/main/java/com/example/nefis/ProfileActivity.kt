@@ -15,19 +15,27 @@ class ProfileActivity : FragmentActivity() {
 
         val prefs = getSharedPreferences("gestix_prefs", Context.MODE_PRIVATE)
         
-        findViewById<TextView>(R.id.tvUserName).text = "Nombre: ${prefs.getString("user_name", "-")}"
-        findViewById<TextView>(R.id.tvUserEmail).text = "Correo: ${prefs.getString("user_email", "-")}"
-        findViewById<TextView>(R.id.tvUserDept).text = "Departamento: ${prefs.getString("user_dept", "-")}"
+        findViewById<TextView>(R.id.tvProfileName).text = prefs.getString("user_name", "Usuario")
+        findViewById<TextView>(R.id.tvProfileEmail).text = prefs.getString("user_email", "correo@ejemplo.com")
 
         findViewById<Button>(R.id.btnLogout).setOnClickListener {
-            // Limpiar sesión
             prefs.edit().clear().apply()
-            
-            // Regresar al login
             val intent = Intent(this, LoginActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(intent)
             finish()
+        }
+        
+        // Efecto de foco para los botones
+        val buttons = listOf(R.id.btnChangePassword, R.id.btnLogout, R.id.btnHelp)
+        buttons.forEach { id ->
+            findViewById<Button>(id).setOnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) {
+                    v.animate().scaleX(1.05f).scaleY(1.05f).setDuration(200).start()
+                } else {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(200).start()
+                }
+            }
         }
     }
 }
